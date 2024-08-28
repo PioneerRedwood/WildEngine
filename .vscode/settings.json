@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "bitmapheaderinfo.h": "c",
+    "stdio.h": "c",
+    "memory.h": "c",
+    "string.h": "c"
+  }
+}
