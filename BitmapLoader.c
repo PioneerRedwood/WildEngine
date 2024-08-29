@@ -19,20 +19,20 @@ typedef struct {
   // or BI_ALPHABITFIELDS
   void* extra_bit_masks;
 
-  // Variable size, mandatory for color depths <= 8 bits
+  // Variable size, mandatory for color depths <= 8 bits (semi-optional)
   void* color_table;
 
-  // Variable size
+  // Variable size (optional)
   void* gap1;
 
-  // Variable size
+  // Variable size 
   void* pixel_data;
 
-  // Variable size
+  // Variable size (optional)
   // An artifact of the ICC profile data offset field in the DIB header
   void* gap2;
 
-  // Variable size
+  // Variable size (optional)
   // Can also contain a path to an external file containing the color profile. 
   // When loaded in memory as "non-packed DIB", 
   // it is located between the color table and Gap1
@@ -50,33 +50,112 @@ int read_bitmap_header_info(FILE* fp, bitmap_header_info* info) {
   int ret_code = 0, offset = 0;
   ret_code = fread_by_offset(info->header_field, sizeof(char), 2, offset, fp);
   if(ret_code != 2) {
+    // TODO: return the reason of failure
     return 1;
   }
 
   offset += ret_code;
   ret_code = fread_by_offset((void*)&(info->size), sizeof(u_int32_t), 1, offset, fp);
   if(ret_code != 1) {
+    // TODO: return the reason of failure
     return 1;
   }
 
   offset += ret_code;
   ret_code = fread_by_offset((void*)&(info->reserved1), sizeof(u_int16_t), 1, offset, fp);
   if(ret_code != 1) {
+    // TODO: return the reason of failure
     return 1;
   }
 
   offset += ret_code;
   ret_code = fread_by_offset((void*)&(info->reserved2), sizeof(u_int16_t), 1, offset, fp);
   if(ret_code != 1) {
+    // TODO: return the reason of failure
     return 1;
   }
 
   offset += ret_code;
   ret_code = fread_by_offset((void*)&(info->pixel_start_offset), sizeof(u_int32_t), 1, offset, fp);
   if(ret_code != 1) {
+    // TODO: return the reason of failure
     return 1;
   }
   
+  return 0;
+}
+
+int read_bitmap_core_header(FILE* fp, bitmap* bmp, int* offset) {
+  bmp->dib_header = (bitmap_core_header*)malloc(sizeof(bitmap_core_header));
+  
+  bitmap_core_header h;
+  int ret_code = 0;
+  ret_code = fread_by_offset(h.header_size, sizeof(u_int32_t), 1, offset, fp);
+  if(ret_code != 1) {
+    // TODO: return the reason of failure
+    return 1;
+  }
+  offset += sizeof(u_int32_t);
+  ret_code = fread_by_offset(h.width, sizeof(u_int16_t), 1, offset, fp);
+  if(ret_code != 1) {
+    return 1;
+  }
+  
+  offset += sizeof(u_int16_t);
+  ret_code = fread_by_offset(h.height, sizeof(u_int16_t), 1, offset, fp);
+  if(ret_code != 1) {
+    return 1;
+  }
+
+  offset += sizeof(u_int16_t);
+  ret_code = fread_by_offset(h.num_color_plane, sizeof(u_int16_t), 1, offset, fp);
+  if(ret_code != 1) {
+    return 1;
+  } else if(h.num_color_plane != 1) {
+    // TODO: The number of color plane must be 1
+    return 1;
+  }
+
+  offset += sizeof(u_int16_t);
+  ret_code = fread_by_offset(h.bits_per_pixel, sizeof(u_int16_t), 1, offset, fp);
+  if(ret_code != 1) {
+    return 1;
+  }
+
+  offset += sizeof(u_int16_t);
+  memcpy(bmp->dib_header, &h, sizeof(bitmap_core_header));
+  return 0;
+}
+
+int read_os22x_bitmap_header(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_os22x_bitmap_header_small(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_os22x_bitmap_header2(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_bitmap_info_header(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_bitmap_v2_info_header(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_bitmap_v3_info_header(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_bitmap_v4_info_header(FILE* fp, bitmap* bmp, int* offset) {
+  return 0;
+}
+
+int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
   return 0;
 }
 
@@ -84,9 +163,10 @@ int read_bitmap_dib_header(FILE* fp, bitmap* bmp, int* offset) {
   switch(bmp->header_type) {
     case BITMAP_CORE_HEADER: {
       // bitmap_core_header
+
       break;
     }
-    case OS22X_BITMAP_HEADER: {
+    case OS22X_BITMAP_HEADER_SMALL: {
       // 
       break;
     }
@@ -99,15 +179,19 @@ int read_bitmap_dib_header(FILE* fp, bitmap* bmp, int* offset) {
       break;
     }
     case BITMAP_V2_INFO_HEADER: {
+      // bitmap
       break;
     }
     case BITMAP_V3_INFO_HEADER: {
+
       break;
     }
     case BITMAP_V4_INFO_HEADER: {
+
       break;
     }
     case BITMAP_V5_INFO_HEADER: {
+
       break;
     }
     default: {
