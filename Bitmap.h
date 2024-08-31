@@ -1,4 +1,18 @@
+#ifdef __MINGW32__
+#include <stdint.h>
+typedef uint8_t u_int8_t;
+typedef uint16_t u_int16_t;
+typedef uint32_t u_int32_t;
+typedef uint64_t u_int64_t;
+
+typedef int8_t int8_t;
+typedef int16_t int16_t;
+typedef int32_t int32_t;
+typedef int64_t int64_t;
+#else
 #include <unistd.h>
+#endif
+
 
 //////////////////////////////////////////////////////////////////////
 
@@ -526,7 +540,7 @@ typedef struct {
   void* gap1;
 
   // Variable size 
-  void* pixel_data;
+  u_int8_t** pixel_data;
 
   // Variable size (optional)
   // An artifact of the ICC profile data offset field in the DIB header

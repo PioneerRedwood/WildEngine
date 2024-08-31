@@ -254,7 +254,7 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
     case BI_RGB: {
       // bits per pixel: 24 = 3 bytes
       // There is no compression
-      bmp->pixel_data = (u_int8_t**)malloc(sizeof(h->height));
+      bmp->pixel_data = (u_int8_t**)malloc(h->height * sizeof(u_int8_t*));
       u_int8_t rgb_masks[3];
       rgb_masks[0] = (h->red_bit_mask >> 16) & 0xFF;
       rgb_masks[1] = (h->green_bit_mask >> 8) & 0xFF;
@@ -263,12 +263,10 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
       // int padding = 0;
       // Read 1st row
       for(int i = h->height - 1; i > 0; --i) {
-        u_int8_t* row = &(bmp->pixel_data[i]);
+        int row_size = h->width * (h->bits_per_pixel / 8); // bytes
+        u_int8_t* row = (u_int8_t*)malloc(row_size); // 1bytes * row_size
         // |<--------------------width------------------->|-------|
         // |Pixel[0, h-1]|Pixel[1, h-1]...|Pixel[w-1, h-1]|Padding|
-        int row_size = h->width * (h->bits_per_pixel / 8); // bytes
-        row = (u_int8_t*)malloc(row_size); // 1bytes * row_size
-
         int ret_code = fread_by_offset(row, sizeof(u_int8_t), row_size, *offset, fp);
         if(ret_code != row_size) {
           printf("[ERROR] read pixel data failed read size = %d offset: %d \n", ret_code, *offset);
@@ -285,6 +283,8 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
             row[j+2] = row[j+2] & rgb_masks[2]; // B
           }
           // printf("[DEBUG] after masking row: %02X %02X %02X \n", row[0], row[1], row[2]);
+
+          ((u_int8_t**)bmp->pixel_data)[i] = row;
         }
       }
       // Deduction
