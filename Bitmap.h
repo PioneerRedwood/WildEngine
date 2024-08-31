@@ -72,13 +72,13 @@ typedef enum {
 typedef struct {
   u_int16_t int_val;
   u_int16_t float_val;
-} fix_point_2_dot_30;
+} fixed_point_2_dot_30;
 
 // 12 bytes
 typedef struct {
-  fix_point_2_dot_30 x;
-  fix_point_2_dot_30 y;
-  fix_point_2_dot_30 z;
+  fixed_point_2_dot_30 x;
+  fixed_point_2_dot_30 y;
+  fixed_point_2_dot_30 z;
 } cie_xyz;
 
 // 36 bytes

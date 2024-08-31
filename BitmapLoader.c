@@ -3,6 +3,10 @@
 #include <memory.h>
 #include "Bitmap.h"
 
+//////////////////////////////////////////////////////////////////////
+/// Read Data
+//////////////////////////////////////////////////////////////////////
+
 int fread_by_offset(void* data, int size, int nitems, int offset, FILE* fp) {
   if(fseek(fp, offset, SEEK_SET) != 0)
     return 0;
@@ -17,6 +21,23 @@ int fpread(void* data, int size, int offset, FILE* fp) {
   }
   return 1;
 }
+
+int read_pixels(FILE* fp, bitmap* bmp) {
+  // TODO: get the dib header to local pointer variable
+
+  switch(bmp->header_type) {
+    case BITMAP_CORE_HEADER:
+      break;
+  }
+}
+
+//////////////////////////////////////////////////////////////////////
+/// End of Read Data
+//////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////
+/// Read Headers
+//////////////////////////////////////////////////////////////////////
 
 int read_bitmap_header_info(FILE* fp, bitmap_header_info* info) {
   int ret_code = 0, offset = 0;
@@ -127,7 +148,6 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 
   bitmap_v5_info_header* h = (bitmap_v5_info_header*)bmp->dib_header;
   h->size = (uint32_t)bmp->header_type;
-  int ret_code = 0;
   // width (4)
   if(fpread(&h->width, sizeof(u_int32_t), *offset, fp) == 0) return 1;
   *offset += sizeof(u_int32_t);
@@ -232,33 +252,85 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 
   switch(h->compression_method) {
     case BI_RGB: {
-      // bpp: 24
+      // bits per pixel: 24 = 3 bytes
+      // There is no compression
+      bmp->pixel_data = (u_int8_t**)malloc(sizeof(h->height));
+      u_int8_t rgb_masks[3];
+      rgb_masks[0] = (h->red_bit_mask >> 16) & 0xFF;
+      rgb_masks[1] = (h->green_bit_mask >> 8) & 0xFF;
+      rgb_masks[2] = (h->blue_bit_mask) & 0xFF;
+      
+      // int padding = 0;
+      // Read 1st row
+      for(int i = h->height - 1; i > 0; --i) {
+        u_int8_t* row = &(bmp->pixel_data[i]);
+        // |<--------------------width------------------->|-------|
+        // |Pixel[0, h-1]|Pixel[1, h-1]...|Pixel[w-1, h-1]|Padding|
+        int row_size = h->width * (h->bits_per_pixel / 8); // bytes
+        row = (u_int8_t*)malloc(row_size); // 1bytes * row_size
+
+        int ret_code = fread_by_offset(row, sizeof(u_int8_t), row_size, *offset, fp);
+        if(ret_code != row_size) {
+          printf("[ERROR] read pixel data failed read size = %d offset: %d \n", ret_code, *offset);
+          return 1;
+        } else {
+          // padding = (row_size % 4); // think it's not necessary
+          *offset += (row_size + sizeof(u_int32_t));
+
+          // printf("[DEBUG] before masking row: %02X %02X %02X \n", row[0], row[1], row[2]);
+          // 0..255 &mpersand with red_bit_mask
+          for(int j = 0; j < row_size; j+=3) {
+            row[j+0] = row[j+0] & rgb_masks[0]; // R
+            row[j+1] = row[j+1] & rgb_masks[1]; // G
+            row[j+2] = row[j+2] & rgb_masks[2]; // B
+          }
+          // printf("[DEBUG] after masking row: %02X %02X %02X \n", row[0], row[1], row[2]);
+        }
+      }
+      // Deduction
       break;
     }
+    // https://en.wikipedia.org/wiki/Run-length_encoding
+    // RLE 8-bit/pixel
     case BI_RLE8: {
+      // TODO: Carry on the following steps:
+      //  1. Read 
       break;
     }
+    // RLE 4-bit/pixel
     case BI_RLE4: {
       break;
     }
+    // BITMAP_V2_INFO_HEADER: RGB bit fields mask
+    // BITMAP_V3_INFO_HEADER+: RGBA
     case BI_BITFIELDS: {
       break;
     }
+    // RLE-24 BITMAP_V4_INFO_HEADER+: JPEG image for printing
     case BI_JPEG: {
       break;
     }
+    // BITMAP_V4_INFO_HEADER+: PNG image for printing
     case BI_PNG: {
       break;
     }
+    // Only Windows CE 5.0 with .NET 4.0 or later
+    // RGBA bit field masks
     case BI_ALPHABITFIELDS: {
       break;
     }
+    // Only Windos Metafile CMYK
+    // None
     case BI_CMYK: {
       break;
     }
+    // Only Windows Metafile CMYK
+    // RLE-8
     case BI_CMYKRLE8: {
       break;
     }
+    // Only Windows Metafile CMYK
+    // RLE-4
     case BI_CMYKRLE4: {
       break;
     }
@@ -308,6 +380,12 @@ int read_bitmap_dib_header(FILE* fp, bitmap* bmp, int* offset) {
   }
   return 0;
 }
+
+//////////////////////////////////////////////////////////////////////
+/// End of Read Headers 
+//////////////////////////////////////////////////////////////////////
+
+
 
 int main(int argc, char** argv) {
   printf("[DEBUG] program initiated .. \n");
@@ -362,6 +440,7 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Read Pixels
+  // So far, reading pixels done. 
 
   // TODO: Render to screen
 
