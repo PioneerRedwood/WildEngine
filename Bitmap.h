@@ -126,26 +126,28 @@ typedef struct {
 } bitmap_header_info;
 
 // BITMAP_CORE_HEADER (12 bytes)
+// Not supported
 typedef struct {
-  // offset: 14
+  // offset: 14, size: 4
   u_int32_t header_size;
 
-  // offset: 18
+  // offset: 18, size: 2
   u_int16_t width;
 
-  // offset: 20
+  // offset: 20, size: 2
   u_int16_t height;
 
-  // offset: 22
+  // offset: 22, size: 2
   // must be 1
-  u_int16_t num_color_plane;
+  u_int16_t num_color_planes;
 
-  // offset: 24
+  // offset: 24, size: 2
   u_int16_t bits_per_pixel;
 
 } bitmap_core_header;
 
 // OS22X_BITMAP_HEADER_2 (64 bytes)
+// Not supported
 typedef struct {
   // offset: 54, size: 2
   // An enumerated value specifying the units for the horizontal and vertical resolutions
@@ -184,6 +186,7 @@ typedef struct {
 } os22x_bitmap_header_2;
 
 // OS22X_BITMAP_HEADER_SMALL (16 bytes)
+// Not supported
 typedef struct {
   // offset: 14, size: 4
   u_int32_t header_size;
@@ -196,7 +199,7 @@ typedef struct {
 
   // offset: 26, size: 2
   // must be 1
-  u_int16_t num_color_plane;
+  u_int16_t num_color_planes;
 
   // offset: 28, size: 2
   u_int16_t bits_per_pixel;
@@ -519,13 +522,14 @@ typedef struct {
 
 typedef struct {
   // Not needed after the file is loaded in memory
-  bitmap_header_info* header_info;
+  bitmap_header_info header_info;
 
   // Identify the type of its dib_header
   bitmap_header_type header_type;
   
   // Immediately follows the Bitmap file header
-  void* dib_header;
+  // void* dib_header;
+  bitmap_v5_info_header dib_header;
   
   // 3 or 4 DWORDS (12 or 16 bytes)
   // Present only in case the DIB header is the BITMAPINFOHEADER 
