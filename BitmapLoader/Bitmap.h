@@ -1,28 +1,15 @@
-#ifdef __MINGW32__
+#pragma once
 #include <stdint.h>
-typedef uint8_t u_int8_t;
-typedef uint16_t u_int16_t;
-typedef uint32_t u_int32_t;
-typedef uint64_t u_int64_t;
-
-typedef int8_t int8_t;
-typedef int16_t int16_t;
-typedef int32_t int32_t;
-typedef int64_t int64_t;
-#else
-#include <unistd.h>
-#endif
-
 
 //////////////////////////////////////////////////////////////////////
 
 typedef enum {
-  BI_RGB = 0,
-  BI_RLE8 = 1,
-  BI_RLE4 = 2,
-  BI_BITFIELDS = 3,
-  BI_JPEG = 4,
-  BI_PNG = 5,
+  //BI_RGB = 0,
+  //BI_RLE8 = 1,
+  //BI_RLE4 = 2,
+  //BI_BITFIELDS = 3,
+  //BI_JPEG = 4,
+  //BI_PNG = 5,
   BI_ALPHABITFIELDS = 6,
   BI_CMYK = 11,
   BI_CMYKRLE8 = 12,
@@ -84,8 +71,8 @@ typedef enum {
 // https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-ciexyz
 // 4 bytes
 typedef struct {
-  u_int16_t int_val;
-  u_int16_t float_val;
+  uint16_t int_val;
+  uint16_t float_val;
 } fixed_point_2_dot_30;
 
 // 12 bytes
@@ -116,33 +103,34 @@ typedef struct {
   // PT (OS/2 pointer)
   char header_field[2];
   
-  u_int32_t size;
+  uint32_t size;
 
-  u_int16_t reserved1;
+  uint16_t reserved1;
   
-  u_int16_t reserved2;
+  uint16_t reserved2;
   
-  u_int32_t pixel_start_offset;
+  uint32_t pixel_start_offset;
+
 } bitmap_header_info;
 
 // BITMAP_CORE_HEADER (12 bytes)
 // Not supported
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t header_size;
+  uint32_t header_size;
 
   // offset: 18, size: 2
-  u_int16_t width;
+  uint16_t width;
 
   // offset: 20, size: 2
-  u_int16_t height;
+  uint16_t height;
 
   // offset: 22, size: 2
   // must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 24, size: 2
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
 } bitmap_core_header;
 
@@ -152,36 +140,36 @@ typedef struct {
   // offset: 54, size: 2
   // An enumerated value specifying the units for the horizontal and vertical resolutions
   // (offsets 38 and 42). The only defined value is 0, meaning pixels per metre
-  u_int16_t pixels_per_metre;
+  uint16_t pixels_per_metre;
   
   // offset: 56, size: 2
   // Ignored and should be zero
-  u_int16_t padding;
+  uint16_t padding;
   
   // offset: 58, size: 2
   // An enumerated value indicating the direction in which the bits fill the bitmap.
   // The only defined value is 0, meaning the origin is the lower-left corner.
   // Bits fill from left-to-right, then bottom-to-top.
-  u_int16_t fill_direction;
+  uint16_t fill_direction;
   
   // offset: 60, size: 2
   // FIXME: See bitmap_halftoning_algorithm_type to use the enum directly.
-  u_int16_t halftoning_algorithm;
+  uint16_t halftoning_algorithm;
 
   // offset: 64, size: 4
-  u_int32_t halftoning_parameter_1;
+  uint32_t halftoning_parameter_1;
   
   // offset: 68, size: 4
-  u_int32_t halftoning_parameter_2;
+  uint32_t halftoning_parameter_2;
 
   // offset: 72, size: 4
   // An enumerated value indicating the color encoding for each entry in the color table. 
   // The only defined value is 0, indicating RGB.
-  u_int32_t color_encoding;
+  uint32_t color_encoding;
   
   // offset: 76, size: 4
   // An application-defined identifier. Not used for image rendering
-  u_int32_t application_defined_id;
+  uint32_t application_defined_id;
 
 } os22x_bitmap_header_2;
 
@@ -189,49 +177,49 @@ typedef struct {
 // Not supported
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t header_size;
+  uint32_t header_size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
 } os22x_bitmap_header_small;
 
 // BITMAP_INFO_HEADER (40 bytes)
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t size;
+  uint32_t size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // Must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
   // Same as the color depths of the image
   // Typical values are 1, 4, 8, 16, 24 and 32
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
   // offset: 30, size: 4
   bitmap_compression_method compression_method;
 
   // offset: 34, size: 4
   // The size of the raw bitmap data; a dummy 0 can be for BI_RGB bitmaps. 
-  u_int32_t image_size;
+  uint32_t image_size;
 
   // offset: 38, size: 4
   int32_t horizontal_resolution;
@@ -242,11 +230,11 @@ typedef struct {
   // offset: 46, size: 4
   // 0 to default to 2^n
   // Colors in color table
-  u_int32_t color_palette;
+  uint32_t color_palette;
 
   // offset: 50, size: 4
   // The number of important colors used, or 0 when every color is important; generally ignored
-  u_int32_t num_important_colors;
+  uint32_t num_important_colors;
 
 } bitmap_info_header;
   
@@ -254,29 +242,29 @@ typedef struct {
 // Added RGB bit masks(12 bytes) from BITMAP_INFO_HEADER (40 bytes)
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t size;
+  uint32_t size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // Must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
   // Same as the color depths of the image
   // Typical values are 1, 4, 8, 16, 24 and 32
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
   // offset: 30, size: 4
   bitmap_compression_method compression_method;
 
   // offset: 34, size: 4
   // The size of the raw bitmap data; a dummy 0 can be for BI_RGB bitmaps. 
-  u_int32_t image_size;
+  uint32_t image_size;
 
   // offset: 38, size: 4
   int32_t horizontal_resolution;
@@ -287,20 +275,20 @@ typedef struct {
   // offset: 46, size: 4
   // 0 to default to 2^n
   // Colors in color table
-  u_int32_t color_palette;
+  uint32_t color_palette;
 
   // offset: 50, size: 4
   // The number of important colors used, or 0 when every color is important; generally ignored
-  u_int32_t num_important_colors;
+  uint32_t num_important_colors;
 
   // offset: 54, size: 4
-  u_int32_t red_bit_mask;
+  uint32_t red_bit_mask;
   
   // offset: 58, size: 4
-  u_int32_t green_bit_mask;
+  uint32_t green_bit_mask;
   
   // offset: 62, size 4
-  u_int32_t blue_bit_mask;
+  uint32_t blue_bit_mask;
 
 } bitmap_v2_info_header;
 
@@ -308,29 +296,29 @@ typedef struct {
 // Added alpha bit masks(4 bytes) from BITMAP_V2_INFO_HEADER (52 bytes)
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t size;
+  uint32_t size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // Must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
   // Same as the color depths of the image
   // Typical values are 1, 4, 8, 16, 24 and 32
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
   // offset: 30, size: 4
   bitmap_compression_method compression_method;
 
   // offset: 34, size: 4
   // The size of the raw bitmap data; a dummy 0 can be for BI_RGB bitmaps. 
-  u_int32_t image_size;
+  uint32_t image_size;
 
   // offset: 38, size: 4
   int32_t horizontal_resolution;
@@ -341,23 +329,23 @@ typedef struct {
   // offset: 46, size: 4
   // 0 to default to 2^n
   // Colors in color table
-  u_int32_t color_palette;
+  uint32_t color_palette;
 
   // offset: 50, size: 4
   // The number of important colors used, or 0 when every color is important; generally ignored
-  u_int32_t num_important_colors;
+  uint32_t num_important_colors;
 
   // offset: 54, size: 4
-  u_int32_t red_bit_mask;
+  uint32_t red_bit_mask;
   
   // offset: 58, size: 4
-  u_int32_t green_bit_mask;
+  uint32_t green_bit_mask;
   
   // offset: 62, size 4
-  u_int32_t blue_bit_mask;
+  uint32_t blue_bit_mask;
 
   // offset: 66, size: 4
-  u_int32_t alpha_bit_mask;
+  uint32_t alpha_bit_mask;
 
 } bitmap_v3_info_header;
 
@@ -366,29 +354,29 @@ typedef struct {
 // TODO: Not sure the offset of it.. figure it out first
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t size;
+  uint32_t size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // Must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
   // Same as the color depths of the image
   // Typical values are 1, 4, 8, 16, 24 and 32
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
   // offset: 30, size: 4
   bitmap_compression_method compression_method;
 
   // offset: 34, size: 4
   // The size of the raw bitmap data; a dummy 0 can be for BI_RGB bitmaps. 
-  u_int32_t image_size;
+  uint32_t image_size;
 
   // offset: 38, size: 4
   int32_t horizontal_resolution;
@@ -399,38 +387,38 @@ typedef struct {
   // offset: 46, size: 4
   // 0 to default to 2^n
   // Colors in color table
-  u_int32_t color_palette;
+  uint32_t color_palette;
 
   // offset: 50, size: 4
   // The number of important colors used, or 0 when every color is important; generally ignored
-  u_int32_t num_important_colors;
+  uint32_t num_important_colors;
 
   // offset: 54, size: 4
-  u_int32_t red_bit_mask;
+  uint32_t red_bit_mask;
   
   // offset: 58, size: 4
-  u_int32_t green_bit_mask;
+  uint32_t green_bit_mask;
   
   // offset: 62, size 4
-  u_int32_t blue_bit_mask;
+  uint32_t blue_bit_mask;
   
   // offset: 66, size: 4
-  u_int32_t alpha_bit_mask;
+  uint32_t alpha_bit_mask;
 
   // offset: 70, size: 4
-  u_int32_t color_space_type;
+  uint32_t color_space_type;
 
   // offset: 74, size: 36
   cie_xyz_triple color_space_endpoints;
 
   // offset: 110, size: 4
-  u_int32_t gamma_red;
+  uint32_t gamma_red;
 
   // offset: 114, size: 4
-  u_int32_t gamma_green;
+  uint32_t gamma_green;
 
   // offset: 118, size: 4
-  u_int32_t gamma_blue;
+  uint32_t gamma_blue;
 
 } bitmap_v4_info_header;
 
@@ -438,29 +426,29 @@ typedef struct {
 // Added intent, icc_profile_data, icc_profile_size and reserved (16 bytes) from BITMAP_V4_INFO_HEADER (108 bytes)
 typedef struct {
   // offset: 14, size: 4
-  u_int32_t size;
+  uint32_t size;
 
   // offset: 18, size: 4
-  u_int32_t width;
+  uint32_t width;
 
   // offset: 22, size: 4
-  u_int32_t height;
+  uint32_t height;
 
   // offset: 26, size: 2
   // Must be 1
-  u_int16_t num_color_planes;
+  uint16_t num_color_planes;
 
   // offset: 28, size: 2
   // Same as the color depths of the image
   // Typical values are 1, 4, 8, 16, 24 and 32
-  u_int16_t bits_per_pixel;
+  uint16_t bits_per_pixel;
 
   // offset: 30, size: 4
   bitmap_compression_method compression_method;
 
   // offset: 34, size: 4
   // The size of the raw bitmap data; a dummy 0 can be for BI_RGB bitmaps. 
-  u_int32_t image_size;
+  uint32_t image_size;
 
   // offset: 38, size: 4
   int32_t horizontal_resolution;
@@ -471,50 +459,50 @@ typedef struct {
   // offset: 46, size: 4
   // 0 to default to 2^n
   // Colors in color table
-  u_int32_t color_palette;
+  uint32_t color_palette;
 
   // offset: 50, size: 4
   // The number of important colors used, or 0 when every color is important; generally ignored
-  u_int32_t num_important_colors;
+  uint32_t num_important_colors;
 
   // offset: 54, size: 4
-  u_int32_t red_bit_mask;
+  uint32_t red_bit_mask;
   
   // offset: 58, size: 4
-  u_int32_t green_bit_mask;
+  uint32_t green_bit_mask;
   
   // offset: 62, size 4
-  u_int32_t blue_bit_mask;
+  uint32_t blue_bit_mask;
   
   // offset: 66, size: 4
-  u_int32_t alpha_bit_mask;
+  uint32_t alpha_bit_mask;
 
   // offset: 70, size: 4
-  u_int32_t color_space_type;
+  uint32_t color_space_type;
 
   // offset: 74, size: 36
   cie_xyz_triple color_space_endpoints;
 
   // offset: 110, size: 4
-  u_int32_t gamma_red;
+  uint32_t gamma_red;
 
   // offset: 114, size: 4
-  u_int32_t gamma_green;
+  uint32_t gamma_green;
 
   // offset: 118, size: 4
-  u_int32_t gamma_blue;
+  uint32_t gamma_blue;
 
   // offset: 122, size: 4
-  u_int32_t intent;
+  uint32_t intent;
 
   // offset: 126, size: 4
-  u_int32_t icc_profile_data;
+  uint32_t icc_profile_data;
 
   // offset: 130, size: 4
-  u_int32_t icc_profile_size;
+  uint32_t icc_profile_size;
 
   // offset: 134, size: 4
-  u_int32_t reserved;
+  uint32_t reserved;
 
 } bitmap_v5_info_header;
 
@@ -544,7 +532,7 @@ typedef struct {
   void* gap1;
 
   // Variable size 
-  u_int8_t** pixel_data;
+  uint8_t** pixel_data;
 
   // Variable size (optional)
   // An artifact of the ICC profile data offset field in the DIB header
