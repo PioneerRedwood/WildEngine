@@ -8,6 +8,7 @@
 /// Read Data
 //////////////////////////////////////////////////////////////////////
 
+// Cannot use on Windows Desktop Application
 int fread_by_offset(void* data, int size, int nitems, int offset, FILE* fp) {
 	if (fp == NULL)
 	{
@@ -15,7 +16,7 @@ int fread_by_offset(void* data, int size, int nitems, int offset, FILE* fp) {
 		return 0;
 	}
 
-	clearerr(fp);
+	//clearerr(fp);
 
 	if (ferror(fp))
 	{
@@ -50,6 +51,7 @@ int fread_by_offset(void* data, int size, int nitems, int offset, FILE* fp) {
 	//return fread(data, size, nitems, fp);
 }
 
+// Cannot use on Windows Desktop Application
 int fpread(void* data, int size, int offset, FILE* fp) {
 	if (fseek(fp, offset, SEEK_SET) != 0)
 		return 0;
@@ -57,6 +59,26 @@ int fpread(void* data, int size, int offset, FILE* fp) {
 		return 0;
 	}
 	return 1;
+}
+
+DWORD ReadFileWithOffset(HANDLE hFile, int size, int offset, void* dst)
+{
+	if (SetFilePointer(hFile, offset, NULL, FILE_CURRENT) == INVALID_SET_FILE_POINTER)
+	{
+		printf("[ERROR] setting file pointer: %lu \n", GetLastError());
+		CloseHandle(hFile);
+		return 0;
+	}
+
+	DWORD dwBytesRead;
+	if (!ReadFile(hFile, dst, size, &dwBytesRead, NULL))
+	{
+		printf("[ERROR] reading file : %lu \n", GetLastError());
+		CloseHandle(hFile);
+		return 0;
+	}
+
+	return dwBytesRead;
 }
 
 int read_pixels(FILE* fp, bitmap* bmp) {
@@ -97,6 +119,30 @@ int read_bitmap_header_info(FILE* fp, bitmap* bmp, int* offset) {
 
 	if (fpread(&h->pixel_start_offset, sizeof(uint32_t), *offset, fp) == 0) return 1;
 	*offset += sizeof(uint32_t);
+
+	return 0;
+}
+
+int ReadBitmapHeaderInfo(HANDLE hFile, bitmap* bmp, int* offset) {
+	bitmap_header_info* h = &(bmp->header_info);
+	DWORD ret_code = ReadFileWithOffset(hFile, sizeof(char) * 2, *offset, &h->header_field);
+	if (ret_code == 0) {
+		// TODO: return the reason of failure
+		return 1;
+	}
+	*offset += ret_code;
+
+	//if (fpread(&h->size, sizeof(uint32_t), *offset, fp) == 0) return 1;
+	//*offset += sizeof(uint32_t);
+
+	//if (fpread(&h->reserved1, sizeof(uint16_t), *offset, fp) == 0) return 1;
+	//*offset += sizeof(uint16_t);
+
+	//if (fpread(&h->reserved2, sizeof(uint16_t), *offset, fp) == 0) return 1;
+	//*offset += sizeof(uint16_t);
+
+	//if (fpread(&h->pixel_start_offset, sizeof(uint32_t), *offset, fp) == 0) return 1;
+	//*offset += sizeof(uint32_t);
 
 	return 0;
 }
@@ -451,61 +497,28 @@ int read_bitmap(FILE* fp, bitmap* bmp)
 	return 0;
 }
 
+int ReadBitmap(HANDLE hFile, bitmap* bmp) 
+{
+	int offset = 0;
 
-//int main(int argc, char** argv) {
-//	printf("[DEBUG] program initiated .. \n");
-//
-//	if (argc != 2) {
-//		printf("[ERROR] no file to read \n");
-//		return 1;
-//	}
-//	else {
-//		printf("[DEBUG] filepath: %s \n", argv[1]);
-//	}
-//
-//	FILE* fp = fopen(argv[1], "rb");
-//	if (fp == NULL) {
-//		printf("[ERROR] failed to open file \n");
-//		return 1;
-//	}
-//
-//	bitmap bmp;
-//	int file_offset = 0;
-//
-//	// TODO: Read bitmap header info
-//	int ret_code = read_bitmap_header_info(fp, &bmp, &file_offset);
-//	if (ret_code != 0) {
-//		printf("[ERROR] failed to read bitmap_header_info \n");
-//		fclose(fp);
-//		return 1;
-//	}
-//	else {
-//		printf("[DEBUG] succeed to read bitmap_header_info size: %u \n", bmp.header_info.size);
-//	}
-//
-//	if (fpread(&bmp.header_type, sizeof(uint32_t), file_offset, fp) == 0) {
-//		printf("[ERROR] failed to read dib_header_size \n");
-//		fclose(fp);
-//		return 1;
-//	}
-//	file_offset += sizeof(uint32_t);
-//
-//	ret_code = read_bitmap_dib_header(fp, &bmp, &file_offset);
-//	if (ret_code != 0) {
-//		printf("[ERROR] failed tp read dib_header \n");
-//		fclose(fp);
-//		return 1;
-//	}
-//
-//	// TODO: Read Pixels
-//	// So far, reading pixels done. 
-//
-//	// TODO: Render to screen
-//
-//	// TODO: Release all resources
-//
-//	// TODO: Exit the program gracefully
-//
-//	printf("[DEBUG] program finished .. \n");
-//	return 0;
-//}
+	if (ReadBitmapHeaderInfo(hFile, bmp, &offset) != 0)
+	{
+		printf("[ERROR] failed to read bitmap header info \n");
+		return 1;
+	}
+
+	//if (fpread(&bmp->header_type, sizeof(uint32_t), offset, fp) == 0) {
+	//	printf("[ERROR] failed to read dib header size \n");
+	//	return 1;
+	//}
+	//offset += sizeof(uint32_t);
+
+	//if (read_bitmap_dib_header(fp, bmp, &offset) != 0) {
+	//	printf("[ERROR] failed tp read dib_header \n");
+	//	return 1;
+	//}
+	
+	// TODO: Read pixels
+
+	return 0;
+}

@@ -163,15 +163,15 @@ void LoadBitmapWindow(HWND hWnd)
 
 	if (GetOpenFileName(&ofn) == TRUE)
 	{
-		char szFileA[512];
-		ZeroMemory(szFileA, 512);
-		int convertedChars = 0;
-		errno_t err = wcstombs_s(&convertedChars, szFileA, sizeof(szFileA), szFile, _TRUNCATE);
-		if (err != 0)
-		{
-			MessageBox(hWnd, L"Failed to convert file path to multibyte string.", L"Error", MB_OK);
-			return NULL;
-		}
+		//char szFileA[512];
+		//ZeroMemory(szFileA, 512);
+		//int convertedChars = 0;
+		//errno_t err = wcstombs_s(&convertedChars, szFileA, sizeof(szFileA), szFile, _TRUNCATE);
+		//if (err != 0)
+		//{
+		//	MessageBox(hWnd, L"Failed to convert file path to multibyte string.", L"Error", MB_OK);
+		//	return NULL;
+		//}
 
 		bmp = (LoadedBmp*)malloc(sizeof(LoadedBmp));
 		if (bmp == NULL) 
@@ -179,23 +179,54 @@ void LoadBitmapWindow(HWND hWnd)
 			MessageBox(hWnd, L"Failed to allocate memory", L"Error", MB_OK);
 			return NULL;
 		}
-		bmp->fp = fopen(szFileA, "rb");
-		if (bmp->fp == NULL)
+		//FILE* fp;
+		//fp = fopen(szFileA, "rb");
+		//if (fp == NULL)
+		//{
+		//	MessageBox(hWnd, L"Failed to open file", L"Error", MB_OK);
+		//	return NULL;
+		//}
+
+		////bmp->origin = (bitmap*)malloc(sizeof(bitmap));
+		//if (read_bitmap(fp, &bmp->origin) != 0)
+		//{
+		//	MessageBox(hWnd, L"Failed to read bitmap", L"Error", MB_OK);
+		//	fclose(fp);
+		//	free(bmp);
+		//	bmp = NULL;
+		//	return NULL;
+		//}
+
+		//bmp->fp = fp;
+
+		HANDLE hFile = CreateFileW(szFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+		if (hFile == INVALID_HANDLE_VALUE)
 		{
-			MessageBox(hWnd, L"Failed to open file", L"Error", MB_OK);
+			DWORD error = GetLastError();
+			if (error == ERROR_ACCESS_DENIED)
+			{
+				MessageBox(hWnd, L"Access denied to file: %s, Error: %lu \n", hFile, error, L"Error", MB_OK);
+			}
+			else
+			{
+				MessageBox(hWnd, L"Failed to open file: %s, Error: %lu \n", szFile, error, L"Error", MB_OK);
+			}
+
+			CloseHandle(hFile);
+
 			return NULL;
 		}
-
-		//bmp->origin = (bitmap*)malloc(sizeof(bitmap));
-		if (read_bitmap(bmp->fp, &bmp->origin) != 0)
+		else
 		{
-			MessageBox(hWnd, L"Failed to read bitmap", L"Error", MB_OK);
-			fclose(bmp->fp);
-			free(bmp);
-			bmp = NULL;
-			return NULL;
+			//MessageBox(hWnd, L"Read access to file: %s \n", szFile, L"Error", MB_OK);
+			if (ReadBitmap(hFile, bmp) == 0)
+			{
+				MessageBox(hWnd, L"No read access to file: %s \n", szFile, L"Error", MB_OK);
+			}
 		}
 
-
+		return NULL;
 	}
 }
