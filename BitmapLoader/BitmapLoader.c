@@ -221,7 +221,7 @@ void LoadBitmapWindow(HWND hWnd)
 		else
 		{
 			//MessageBox(hWnd, L"Read access to file: %s \n", szFile, L"Error", MB_OK);
-			if (ReadBitmap(hFile, bmp) == 0)
+			if (ReadBitmap(hFile, bmp) != 0)
 			{
 				MessageBox(hWnd, L"No read access to file: %s \n", szFile, L"Error", MB_OK);
 			}

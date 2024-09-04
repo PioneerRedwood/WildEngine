@@ -4,321 +4,249 @@
 #include <Windows.h>
 #include "Bitmap.h"
 
-//////////////////////////////////////////////////////////////////////
-/// Read Data
-//////////////////////////////////////////////////////////////////////
-
-// Cannot use on Windows Desktop Application
-int fread_by_offset(void* data, int size, int nitems, int offset, FILE* fp) {
-	if (fp == NULL)
-	{
-		fprintf(stderr, "Error: File pointer is NULL. \n");
-		return 0;
-	}
-
-	//clearerr(fp);
-
-	if (ferror(fp))
-	{
-		fprintf(stderr, "Error: File stream error detected before fseek. Clearing errors. \n");
-		clearerr(fp);
-		return 0;
-	}
-
-	if (fseek(fp, offset, SEEK_SET) != 0)
-	{
-		fprintf(stderr, "Error: fseek failed. Unable to set file position to offset %d. \n", offset);
-		perror("fseek");
-		return 0;
-	}
-
-	int items_read = fread(data, size, nitems, fp);
-
-	if (items_read < nitems) {
-		if (feof(fp))
-		{
-			fprintf(stderr, "Warning: End of file reached before reading the expected number of items. \n");
-		}
-		else if (ferror(fp))
-		{
-			fprintf(stderr, "Error: File read error occurred. \n");
-			perror("fread");
-		}
-	}
-
-	return items_read;
-
-	//return fread(data, size, nitems, fp);
-}
-
-// Cannot use on Windows Desktop Application
-int fpread(void* data, int size, int offset, FILE* fp) {
-	if (fseek(fp, offset, SEEK_SET) != 0)
-		return 0;
-	if (fread(data, size, 1, fp) != 1) {
-		return 0;
-	}
-	return 1;
-}
-
 DWORD ReadFileWithOffset(HANDLE hFile, int size, int offset, void* dst)
 {
-	if (SetFilePointer(hFile, offset, NULL, FILE_CURRENT) == INVALID_SET_FILE_POINTER)
-	{
-		printf("[ERROR] setting file pointer: %lu \n", GetLastError());
-		CloseHandle(hFile);
-		return 0;
-	}
-
-	DWORD dwBytesRead;
-	if (!ReadFile(hFile, dst, size, &dwBytesRead, NULL))
+	DWORD readBytes;
+	if (!ReadFile(hFile, dst, size, &readBytes, NULL))
 	{
 		printf("[ERROR] reading file : %lu \n", GetLastError());
 		CloseHandle(hFile);
 		return 0;
 	}
 
-	return dwBytesRead;
-}
-
-int read_pixels(FILE* fp, bitmap* bmp) {
-	// TODO: get the dib header to local pointer variable
-
-	switch (bmp->header_type) {
-	case BITMAP_CORE_HEADER:
-		break;
+	// Move the offset as (previous offset + read)
+	if (SetFilePointer(hFile, offset + readBytes, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+	{
+		printf("[ERROR] setting file pointer: %lu \n", GetLastError());
+		CloseHandle(hFile);
+		return 0;
 	}
-}
 
-//////////////////////////////////////////////////////////////////////
-/// End of Read Data
-//////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////
-/// Read Headers
-//////////////////////////////////////////////////////////////////////
-
-int read_bitmap_header_info(FILE* fp, bitmap* bmp, int* offset) {
-	bitmap_header_info* h = &(bmp->header_info);
-	int ret_code = 0;
-	ret_code = fread_by_offset(&h->header_field, sizeof(char), 2, *offset, fp);
-	if (ret_code != 2) {
-		// TODO: return the reason of failure
-		return 1;
-	}
-	*offset += ret_code;
-
-	if (fpread(&h->size, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
-
-	if (fpread(&h->reserved1, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
-
-	if (fpread(&h->reserved2, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
-
-	if (fpread(&h->pixel_start_offset, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
-
-	return 0;
+	return readBytes;
 }
 
 int ReadBitmapHeaderInfo(HANDLE hFile, bitmap* bmp, int* offset) {
 	bitmap_header_info* h = &(bmp->header_info);
-	DWORD ret_code = ReadFileWithOffset(hFile, sizeof(char) * 2, *offset, &h->header_field);
-	if (ret_code == 0) {
+	// header_field (2 bytes)
+	DWORD readBytes = ReadFileWithOffset(hFile, sizeof(char) * 2, *offset, &h->header_field);
+	if (readBytes == 0) {
 		// TODO: return the reason of failure
 		return 1;
 	}
-	*offset += ret_code;
+	*offset += readBytes;
 
-	//if (fpread(&h->size, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	//*offset += sizeof(uint32_t);
+	// size (4 bytes)
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->size);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
-	//if (fpread(&h->reserved1, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	//*offset += sizeof(uint16_t);
+	// reserved1 (2 bytes)
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint16_t), *offset, &h->reserved1);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
-	//if (fpread(&h->reserved2, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	//*offset += sizeof(uint16_t);
+	// reserved2 (2 bytes)
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint16_t), *offset, &h->reserved2);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
-	//if (fpread(&h->pixel_start_offset, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	//*offset += sizeof(uint32_t);
-
-	return 0;
-}
-
-int read_bitmap_core_header(FILE* fp, bitmap* bmp, int* offset) {
-	bitmap_v5_info_header* h = &bmp->dib_header;
-
-	if (fpread(&h->width, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
-
-	if (fpread(&h->height, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
-
-	if (fpread(&h->num_color_planes, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
-	// TODO: The number of color plane must be 1
-	/*
-	if (h->num_color_planes != 1) {
-		return 1;
-	}
-	*/
-
-	if (fpread(&h->bits_per_pixel, sizeof(uint16_t), 1, *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
+	// pixel_start_offset (4 bytes)
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->pixel_start_offset);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	return 0;
 }
 
-/**
-* Read BITMAP_INFO_HEADER
-* Start offset of file: 14, total expected header size: 40 bytes
-*/
-int read_bitmap_info_header(FILE* fp, bitmap* bmp, int* offset) {
+/// <summary>
+/// Read BITMAP_INFO_HEADER
+/// Start offset of file: 14, total expected header size: 40 bytes
+/// </summary>
+/// <param name="hFile">File handle</param>
+/// <param name="bmp">Bitmap pointer</param>
+/// <param name="offset">File offset to read</param>
+/// <returns>Success 0, failed or error 1</returns>
+int ReadBitmapInfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 	bitmap_v5_info_header* h = &bmp->dib_header;
 	h->size = (uint32_t)bmp->header_type;
 
+	int readBytes = 0;
+
 	// width (4)
-	if (fpread(&h->width, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->width);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// height (4)
-	if (fpread(&h->height, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->height);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// num_color_planes (2)
-	if (fpread(&h->num_color_planes, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint16_t), *offset, &h->num_color_planes);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
+
 
 	// bits_per_pixel (2)
-	if (fpread(&h->bits_per_pixel, sizeof(uint16_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint16_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint16_t), *offset, &h->bits_per_pixel);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// compression_method (4)
-	if (fpread(&h->compression_method, sizeof(bitmap_compression_method), *offset, fp) == 0) return 1;
-	*offset += sizeof(bitmap_compression_method);
+	readBytes = ReadFileWithOffset(hFile, sizeof(bitmap_compression_method), *offset, &h->compression_method);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// image_size (4)
-	if (fpread(&h->image_size, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->image_size);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
+
 
 	// horizontal_resolution (4)
-	if (fpread(&h->horizontal_resolution, sizeof(int32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(int32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->horizontal_resolution);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// vertical_resolution (4)
-	if (fpread(&h->vertical_resolution, sizeof(int32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(int32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->vertical_resolution);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// color_palette (4)
-	if (fpread(&h->color_palette, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->color_palette);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
+
 	if (h->color_palette > 0) {
 		// TODO: Prepare to read color table 
 		printf("[DEBUG] this bmp has a non-zero color_palette, prepare to read its color table \n");
 	}
 
 	// num_important_colors (4)
-	if (fpread(&h->num_important_colors, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->num_important_colors);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	return 0;
 }
 
-int read_bitmap_v2_info_header(FILE* fp, bitmap* bmp, int* offset) {
-	if (read_bitmap_info_header(fp, bmp, offset) != 0) {
+int ReadBitmapV2InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
+	if (ReadBitmapInfoHeader(hFile, bmp, offset) != 0) {
 		// TODO: failed to read bitmap v1 info header
 		return 1;
 	}
 
 	bitmap_v5_info_header* h = &bmp->dib_header;
+
+	int readBytes = 0;
 
 	// red_bit_mask (4)
-	if (fpread(&h->red_bit_mask, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->red_bit_mask);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// green_bit_mask (4)
-	if (fpread(&h->green_bit_mask, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->green_bit_mask);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// blue_bit_mask (4)
-	if (fpread(&h->blue_bit_mask, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->blue_bit_mask);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	return 0;
 }
 
-int read_bitmap_v3_info_header(FILE* fp, bitmap* bmp, int* offset) {
-	if (read_bitmap_v2_info_header(fp, bmp, offset) != 0) {
+int ReadBitmapV3InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
+	if (ReadBitmapV2InfoHeader(hFile, bmp, offset) != 0) {
 		// TODO: failed to read bitmap v1 info header
 		return 1;
 	}
 
 	bitmap_v5_info_header* h = &bmp->dib_header;
+
+	int readBytes = 0;
 
 	// alpha_bit_mask (4)
-	if (fpread(&h->alpha_bit_mask, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->alpha_bit_mask);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	return 0;
 }
 
-int read_bitmap_v4_info_header(FILE* fp, bitmap* bmp, int* offset) {
-	if (read_bitmap_v3_info_header(fp, bmp, offset) != 0) {
+int ReadBitmapV4InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
+	if (ReadBitmapV3InfoHeader(hFile, bmp, offset) != 0) {
 		// TODO: failed to read bitmap v1 info header
 		return 1;
 	}
 
 	bitmap_v5_info_header* h = &bmp->dib_header;
+
+	int readBytes = 0;
 
 	// color_space_type (4)
-	if (fpread(&h->color_space_type, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->color_space_type);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// color_space_endpoints (36)
-	if (fpread(&h->color_space_endpoints, sizeof(cie_xyz_triple), *offset, fp) == 0) return 1;
-	*offset += sizeof(cie_xyz_triple);
+	readBytes = ReadFileWithOffset(hFile, sizeof(cie_xyz_triple), *offset, &h->color_space_endpoints);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// gamma_red (4)
-	if (fpread(&h->gamma_red, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->gamma_red);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// gamma_green (4)
-	if (fpread(&h->gamma_green, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->gamma_green);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// gamma_blue (4)
-	if (fpread(&h->gamma_blue, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->gamma_blue);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	return 0;
 }
 
-int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
-	if (read_bitmap_v4_info_header(fp, bmp, offset) != 0) {
+int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
+	if (ReadBitmapV4InfoHeader(hFile, bmp, offset) != 0) {
 		// TODO: failed to read bitmap v1 info header
 		return 1;
 	}
 
 	bitmap_v5_info_header* h = &bmp->dib_header;
 
+	int readBytes = 0;
+
 	// intent (4)
-	if (fpread(&h->intent, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->intent);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// icc_profile_data (4)
-	if (fpread(&h->icc_profile_data, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->icc_profile_data);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
+
 	// TODO: If bigger then zero, prepare to read icc_profile_data as icc_profile_size
 
 	// icc_profile_size (4)
-	if (fpread(&h->icc_profile_size, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->icc_profile_size);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// reserved (4)
-	if (fpread(&h->reserved, sizeof(uint32_t), *offset, fp) == 0) return 1;
-	*offset += sizeof(uint32_t);
+	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->reserved);
+	if (readBytes == 0) return 1;
+	*offset += readBytes;
 
 	// TODO: Before read pixels, know its pixel format. 
 	// bits_per_pixel, compression and RGBA masks are the factors which determine the pixel format. 
@@ -326,9 +254,9 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 		h->bits_per_pixel, h->compression_method, h->red_bit_mask, h->green_bit_mask, h->blue_bit_mask, h->alpha_bit_mask);
 
 	switch (h->compression_method) {
+		// There is no compression
 	case BI_RGB: {
 		// bits per pixel: 24 = 3 bytes
-		// There is no compression
 		bmp->pixel_data = (uint8_t**)malloc(h->height * sizeof(uint8_t*));
 		uint8_t rgb_masks[3];
 		rgb_masks[0] = (h->red_bit_mask >> 16) & 0xFF;
@@ -342,9 +270,9 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 			uint8_t* row = (uint8_t*)malloc(row_size); // 1bytes * row_size
 			// |<--------------------width------------------->|-------|
 			// |Pixel[0, h-1]|Pixel[1, h-1]...|Pixel[w-1, h-1]|Padding|
-			int ret_code = fread_by_offset(row, sizeof(uint8_t), row_size, *offset, fp);
-			if (ret_code != row_size) {
-				printf("[ERROR] read pixel data failed read size = %d offset: %d \n", ret_code, *offset);
+			int readBytes = ReadFileWithOffset(hFile, sizeof(uint8_t) * row_size, *offset, row);
+			if (readBytes != row_size) {
+				printf("[ERROR] read pixel data failed read size = %d offset: %d \n", readBytes, *offset);
 				return 1;
 			}
 			else {
@@ -363,51 +291,66 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 				((uint8_t**)bmp->pixel_data)[i] = row;
 			}
 		}
-		// Deduction
 		break;
 	}
 	case BI_RLE8: {
 		// https://en.wikipedia.org/wiki/Run-length_encoding
 		// RLE 8-bit/pixel
-		// TODO: Carry on the following steps:
-		//  1. Read 
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_RLE4: {
 		// RLE 4-bit/pixel
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_BITFIELDS: {
 		// BITMAP_V2_INFO_HEADER: RGB bit fields mask
 		// BITMAP_V3_INFO_HEADER+: RGBA
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_JPEG: {
 		// RLE-24 BITMAP_V4_INFO_HEADER+: JPEG image for printing
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_PNG: {
 		// BITMAP_V4_INFO_HEADER+: PNG image for printing
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_ALPHABITFIELDS: {
 		// Only Windows CE 5.0 with .NET 4.0 or later
 		// RGBA bit field masks
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_CMYK: {
 		// Only Windos Metafile CMYK
 		// None
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_CMYKRLE8: {
 		// Only Windows Metafile CMYK
 		// RLE-8
+		// Not supported
+		return 1;
 		break;
 	}
 	case BI_CMYKRLE4: {
 		// Only Windows Metafile CMYK
 		// RLE-4
+		// Not supported
+		return 1;
 		break;
 	}
 	default: break;
@@ -417,47 +360,51 @@ int read_bitmap_v5_info_header(FILE* fp, bitmap* bmp, int* offset) {
 
 /// <summary>
 /// Read bitmap Device-Independent Bitmap(DIB) header.
-/// Not supported header type: BITMAP_CORE_HEADER, OS22X_BITMAP_HEADER_2, OS22X_BITMAP_HEADER_SMALL return -1
+/// Not supported header type: BITMAP_CORE_HEADER, OS22X_BITMAP_HEADER_2, OS22X_BITMAP_HEADER_SMALL return 1
 /// Supported header type: BITMAP_INFO_HEADER, V2~V5 INFO HEADER return 0
 /// If error occurred, return 1
 /// </summary>
-/// <param name="fp">File pointer</param>
+/// <param name="hFile">File pointer</param>
 /// <param name="bmp">Bitmap pointer</param>
 /// <param name="offset">File offset</param>
-/// <returns></returns>
-int read_bitmap_dib_header(FILE* fp, bitmap* bmp, int* offset) {
-	int result = -1;
+/// <returns>0 if success, otherwise 1</returns>
+int ReadBitmapDIBHeader(HANDLE hFile, bitmap* bmp, int* offset)
+{
+	int result = 0;
 	switch (bmp->header_type) {
 	case BITMAP_CORE_HEADER: {
 		// Not supported
+		result = 1;
 		break;
 	}
 	case OS22X_BITMAP_HEADER_2: {
 		// Not supported
+		result = 1;
 		break;
 	}
 	case OS22X_BITMAP_HEADER_SMALL: {
 		// Not supported
+		result = 1;
 		break;
 	}
 	case BITMAP_INFO_HEADER: {
-		result = read_bitmap_info_header(fp, bmp, offset);
+		result = ReadBitmapInfoHeader(hFile, bmp, offset);
 		break;
 	}
 	case BITMAP_V2_INFO_HEADER: {
-		result = read_bitmap_v2_info_header(fp, bmp, offset);
+		result = ReadBitmapV2InfoHeader(hFile, bmp, offset);
 		break;
 	}
 	case BITMAP_V3_INFO_HEADER: {
-		result = read_bitmap_v3_info_header(fp, bmp, offset);
+		result = ReadBitmapV3InfoHeader(hFile, bmp, offset);
 		break;
 	}
 	case BITMAP_V4_INFO_HEADER: {
-		result = read_bitmap_v4_info_header(fp, bmp, offset);
+		result = ReadBitmapV4InfoHeader(hFile, bmp, offset);
 		break;
 	}
 	case BITMAP_V5_INFO_HEADER: {
-		result = read_bitmap_v5_info_header(fp, bmp, offset);
+		result = ReadBitmapV5InfoHeader(hFile, bmp, offset);
 		break;
 	}
 	default: {
@@ -467,37 +414,7 @@ int read_bitmap_dib_header(FILE* fp, bitmap* bmp, int* offset) {
 	return result;
 }
 
-//////////////////////////////////////////////////////////////////////
-/// End of Read Headers 
-//////////////////////////////////////////////////////////////////////
-
-int read_bitmap(FILE* fp, bitmap* bmp) 
-{
-	int offset = 0;
-
-	if (read_bitmap_header_info(fp, bmp, &offset) != 0) 
-	{
-		printf("[ERROR] failed to read bitmap header info \n");
-		return 1;
-	}
-
-	if (fpread(&bmp->header_type, sizeof(uint32_t), offset, fp) == 0) {
-		printf("[ERROR] failed to read dib header size \n");
-		return 1;
-	}
-	offset += sizeof(uint32_t);
-
-	if (read_bitmap_dib_header(fp, bmp, &offset) != 0) {
-		printf("[ERROR] failed tp read dib_header \n");
-		return 1;
-	}
-	
-	// TODO: Read pixels
-
-	return 0;
-}
-
-int ReadBitmap(HANDLE hFile, bitmap* bmp) 
+int ReadBitmap(HANDLE hFile, bitmap* bmp)
 {
 	int offset = 0;
 
@@ -507,18 +424,19 @@ int ReadBitmap(HANDLE hFile, bitmap* bmp)
 		return 1;
 	}
 
-	//if (fpread(&bmp->header_type, sizeof(uint32_t), offset, fp) == 0) {
-	//	printf("[ERROR] failed to read dib header size \n");
-	//	return 1;
-	//}
-	//offset += sizeof(uint32_t);
+	int readBytes = ReadFileWithOffset(hFile, sizeof(bitmap_header_type), offset, &bmp->header_type);
+	if (readBytes == 0) {
+		printf("[ERROR] failed to read dib header size \n");
+		return 1;
+	}
+	offset += readBytes;
 
-	//if (read_bitmap_dib_header(fp, bmp, &offset) != 0) {
-	//	printf("[ERROR] failed tp read dib_header \n");
-	//	return 1;
-	//}
-	
-	// TODO: Read pixels
+	readBytes = ReadBitmapDIBHeader(hFile, bmp, &offset);
+	if (readBytes != 0) {
+		printf("[ERROR] failed tp read dib_header \n");
+		return 1;
+	}
+	offset += readBytes;
 
 	return 0;
 }
