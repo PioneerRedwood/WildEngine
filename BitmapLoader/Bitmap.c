@@ -1,23 +1,64 @@
-#include <stdio.h>
+﻿#include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <stdarg.h>
 #include <Windows.h>
+#include <math.h>
 #include "Bitmap.h"
+
+void LogBitmapMessage(LPCWSTR format, ...)
+{
+	va_list args;
+	va_start(args, format);
+
+	LPCWSTR buffer[1024] = {0};
+	vsnprintf(buffer, sizeof(buffer), format, args);
+
+	OutputDebugString(buffer);
+
+	va_end(args);
+}
+
+void readGamma(uint8_t* profileData, float* gammaR, float* gammaG, float* gammaB) {
+	// ICC 프로파일의 감마 데이터 파싱하는 방법
+	// ICC 프로파일 구조에 따라 달라질 수 있음
+	// 아래는 간단한 감마 예제 값
+	//*gammaR = 2.2f;
+	//*gammaG = 2.2f;
+	//*gammaB = 2.2f;
+}
+
+void ApplyGamma(uint8_t** pixelData, int width, int height, float gammaR, float gammaG, float gammaB)
+{
+	// 감마 보정값이 0인 경우 기본값 적용
+	if (gammaR <= 0.0f) gammaR = 2.2f;
+	if (gammaG <= 0.0f) gammaG = 2.2f;
+	if (gammaB <= 0.0f) gammaB = 2.2f;
+
+	for (int y = 0; y < height; ++y) {
+		uint8_t* row = pixelData[y];
+		for (int x = 0; x < width; ++x) {
+			uint8_t* pixel = row + x * 3;
+			pixel[0] = (uint8_t)(255 * pow(pixel[0] / 255.0f, 1.0f / gammaR)); // R
+			pixel[1] = (uint8_t)(255 * pow(pixel[1] / 255.0f, 1.0f / gammaG)); // G
+			pixel[2] = (uint8_t)(255 * pow(pixel[2] / 255.0f, 1.0f / gammaB)); // B
+		}
+	}
+}
 
 DWORD ReadFileWithOffset(HANDLE hFile, int size, int offset, void* dst)
 {
 	DWORD readBytes;
 	if (!ReadFile(hFile, dst, size, &readBytes, NULL))
 	{
-		printf("[ERROR] reading file : %lu \n", GetLastError());
+		LogBitmapMessage(L"[ERROR] reading file : %lu \n", GetLastError());
 		CloseHandle(hFile);
 		return 0;
 	}
 
-	// Move the offset as (previous offset + read)
 	if (SetFilePointer(hFile, offset + readBytes, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
 	{
-		printf("[ERROR] setting file pointer: %lu \n", GetLastError());
+		LogBitmapMessage(L"[ERROR] setting file pointer: %lu \n", GetLastError());
 		CloseHandle(hFile);
 		return 0;
 	}
@@ -121,7 +162,7 @@ int ReadBitmapInfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 
 	if (h->color_palette > 0) {
 		// TODO: Prepare to read color table 
-		printf("[DEBUG] this bmp has a non-zero color_palette, prepare to read its color table \n");
+		LogBitmapMessage(L"[DEBUG] this bmp has a non-zero color_palette, prepare to read its color table \n");
 	}
 
 	// num_important_colors (4)
@@ -243,6 +284,24 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 	if (readBytes == 0) return 1;
 	*offset += readBytes;
 
+	// ICC 프로파일이 존재하면 데이터 읽기
+	//if (h->icc_profile_size > 0) {
+	//	icc_profile profile = {0};
+	//	profile.data = (uint8_t*)malloc(h->icc_profile_size);
+	//	if (profile.data != NULL)
+	//	{
+	//		ZeroMemory(profile.data, sizeof(h->icc_profile_size));
+	//		int readIccProfileSize = ReadFileWithOffset(hFile, h->icc_profile_size, h->icc_profile_data, profile.data);
+	//		if (readIccProfileSize != 0)
+	//		{
+	//			memcpy(&profile.header, profile.data, sizeof(icc_profile_header));
+
+	//			float gammaR, gammaG, gammaB;
+	//			readGamma(profile.data, &h->gamma_red, &h->gamma_green, &h->gamma_blue);
+	//		}
+	//	}
+	//}
+
 	// reserved (4)
 	readBytes = ReadFileWithOffset(hFile, sizeof(uint32_t), *offset, &h->reserved);
 	if (readBytes == 0) return 1;
@@ -250,46 +309,67 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 
 	// TODO: Before read pixels, know its pixel format. 
 	// bits_per_pixel, compression and RGBA masks are the factors which determine the pixel format. 
-	printf("[DEBUG] read_bitmap_v5_info_header determine its pixel format [ bits_per_pixel: %u compression: %d, RGBA masks: %u %u %u %u ] \n",
+	LogBitmapMessage(L"[DEBUG] read_bitmap_v5_info_header determine its pixel format [ bits_per_pixel: %u compression: %d, RGBA masks: %u %u %u %u ] \n",
 		h->bits_per_pixel, h->compression_method, h->red_bit_mask, h->green_bit_mask, h->blue_bit_mask, h->alpha_bit_mask);
 
 	switch (h->compression_method) {
-		// There is no compression
 	case BI_RGB: {
 		// bits per pixel: 24 = 3 bytes
 		bmp->pixel_data = (uint8_t**)malloc(h->height * sizeof(uint8_t*));
-		uint8_t rgb_masks[3];
-		rgb_masks[0] = (h->red_bit_mask >> 16) & 0xFF;
-		rgb_masks[1] = (h->green_bit_mask >> 8) & 0xFF;
-		rgb_masks[2] = (h->blue_bit_mask) & 0xFF;
+		if (bmp->pixel_data == NULL)
+		{
+			LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 열 메모리 생성에 실패 \n");
+			return 1;
+		}
+		ZeroMemory(bmp->pixel_data, h->height * sizeof(uint8_t*));
 
-		// int padding = 0;
-		// Read 1st row
-		for (int i = h->height - 1; i > 0; --i) {
-			int row_size = h->width * (h->bits_per_pixel / 8); // bytes
-			uint8_t* row = (uint8_t*)malloc(row_size); // 1bytes * row_size
-			// |<--------------------width------------------->|-------|
-			// |Pixel[0, h-1]|Pixel[1, h-1]...|Pixel[w-1, h-1]|Padding|
-			int readBytes = ReadFileWithOffset(hFile, sizeof(uint8_t) * row_size, *offset, row);
-			if (readBytes != row_size) {
-				printf("[ERROR] read pixel data failed read size = %d offset: %d \n", readBytes, *offset);
+		uint8_t rgb_masks[3] = {
+			(h->red_bit_mask >> 16) & 0xFF,
+			(h->green_bit_mask >> 8) & 0xFF,
+			(h->blue_bit_mask) & 0xFF
+		};
+
+		int row_size = h->width * (h->bits_per_pixel / 8); // bytes
+		int padding = (4 - (row_size % 4)) % 4;
+		
+		for (int i = h->height - 1; i >= 0; --i) 
+		{
+			uint8_t* row = (uint8_t*)malloc(row_size);
+			if (row == NULL) 
+			{
+				for (int j = h->height - 1; j > i; --j) {
+					free(bmp->pixel_data[j]);
+				}
+				free(bmp->pixel_data);
+				LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 행 메모리 생성에 실패 \n");
 				return 1;
 			}
-			else {
-				// padding = (row_size % 4); // think it's not necessary
-				*offset += (row_size + sizeof(uint32_t));
+			ZeroMemory(row, row_size);
 
-				// printf("[DEBUG] before masking row: %02X %02X %02X \n", row[0], row[1], row[2]);
-				// 0..255 &mpersand with red_bit_mask
-				for (int j = 0; j < row_size; j += 3) {
+			int readBytes = ReadFileWithOffset(hFile, sizeof(uint8_t) * row_size, *offset, row);
+
+			if (readBytes != row_size) 
+			{
+				for (int j = h->height - 1; j >= i; --j) {
+					free(bmp->pixel_data[j]);
+				}
+				free(bmp->pixel_data);
+
+				LogBitmapMessage(L"[ERROR] read pixel data failed read size = %d offset: %d \n", readBytes, *offset);
+				return 1;
+			}
+
+			*offset += row_size + padding;
+
+			for (int j = 0; j < row_size; j += 3) {
+				if (j + 2 < row_size) {
 					row[j + 0] = row[j + 0] & rgb_masks[0]; // R
 					row[j + 1] = row[j + 1] & rgb_masks[1]; // G
 					row[j + 2] = row[j + 2] & rgb_masks[2]; // B
 				}
-				// printf("[DEBUG] after masking row: %02X %02X %02X \n", row[0], row[1], row[2]);
-
-				((uint8_t**)bmp->pixel_data)[i] = row;
 			}
+
+			bmp->pixel_data[i] = row;
 		}
 		break;
 	}
@@ -355,6 +435,8 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 	}
 	default: break;
 	}
+
+	ApplyGamma(bmp->pixel_data, h->width, h->height, h->gamma_red, h->gamma_green, h->gamma_blue);
 	return 0;
 }
 
@@ -420,23 +502,73 @@ int ReadBitmap(HANDLE hFile, bitmap* bmp)
 
 	if (ReadBitmapHeaderInfo(hFile, bmp, &offset) != 0)
 	{
-		printf("[ERROR] failed to read bitmap header info \n");
+		LogBitmapMessage(L"[ERROR] failed to read bitmap header info \n");
 		return 1;
 	}
 
 	int readBytes = ReadFileWithOffset(hFile, sizeof(bitmap_header_type), offset, &bmp->header_type);
 	if (readBytes == 0) {
-		printf("[ERROR] failed to read dib header size \n");
+		LogBitmapMessage(L"[ERROR] failed to read dib header size \n");
 		return 1;
 	}
 	offset += readBytes;
 
 	readBytes = ReadBitmapDIBHeader(hFile, bmp, &offset);
 	if (readBytes != 0) {
-		printf("[ERROR] failed tp read dib_header \n");
+		LogBitmapMessage(L"[ERROR] failed tp read dib_header \n");
 		return 1;
 	}
 	offset += readBytes;
 
 	return 0;
+}
+
+void DestroyBitmap(bitmap* b)
+{
+	if (b == NULL) return;
+
+	bitmap_v5_info_header* h = &b->dib_header;
+
+	uint8_t** pixel_data = b->pixel_data;
+	for (int i = 0; i < h->height; ++i)
+	{
+		uint8_t* row = pixel_data[i];
+		free(row);
+		row = NULL;
+	}
+	free(pixel_data);
+	pixel_data = NULL;
+
+	if (b->extra_bit_masks)
+	{
+		free(b->extra_bit_masks);
+		b->extra_bit_masks = NULL;
+	}
+
+	if (b->gap1)
+	{
+		free(b->gap1);
+		b->gap1 = NULL;
+	}
+
+	if (b->gap2)
+	{
+		free(b->gap2);
+		b->gap2 = NULL;
+	}
+
+	if (b->color_table)
+	{
+		free(b->color_table);
+		b->color_table = NULL;
+	}
+
+	if (b->icc_color_profile)
+	{
+		free(b->icc_color_profile);
+		b->icc_color_profile = NULL;
+	}
+
+	free(b);
+	b = NULL;
 }

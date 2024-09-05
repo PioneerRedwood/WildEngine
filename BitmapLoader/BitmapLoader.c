@@ -12,13 +12,7 @@ HINSTANCE hInst;                                // 현재 인스턴스입니다.
 WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입니다.
 WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름입니다.
 
-typedef struct {
-	FILE* fp;
-	//bitmap* origin;
-	bitmap origin;
-} LoadedBmp;
-
-LoadedBmp* bmp;
+bitmap* bmp;
 
 // 이 코드 모듈에 포함된 함수의 선언을 전달합니다:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -61,7 +55,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	return (int)msg.wParam;
 }
-
 
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
@@ -130,6 +123,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PAINTSTRUCT ps;
 		HDC hdc = BeginPaint(hWnd, &ps);
 		// TODO: 여기에 hdc를 사용하는 그리기 코드를 추가합니다...
+		
+		if (bmp != NULL && bmp->pixel_data != NULL)
+		{
+			uint32_t w = bmp->dib_header.width;
+			uint32_t h = bmp->dib_header.height;
+			uint8_t** pixel = bmp->pixel_data;
+			uint32_t bits_per_pixel = bmp->dib_header.bits_per_pixel;
+
+			for (int y = 0; y < h; ++y) 
+			{
+				uint8_t* row = pixel[y];
+				for (int x = 0; x < w; ++x)
+				{
+					uint8_t r = row[x * (bits_per_pixel / 8) + 0];
+					uint8_t g = row[x * (bits_per_pixel / 8) + 1];
+					uint8_t b = row[x * (bits_per_pixel / 8) + 2];
+
+					// BGR -> RGB
+					COLORREF color = RGB(b, g, r);
+
+					SetPixel(hdc, x, y, color);
+				}
+			}
+		}
 
 		EndPaint(hWnd, &ps);
 	}
@@ -163,41 +180,18 @@ void LoadBitmapWindow(HWND hWnd)
 
 	if (GetOpenFileName(&ofn) == TRUE)
 	{
-		//char szFileA[512];
-		//ZeroMemory(szFileA, 512);
-		//int convertedChars = 0;
-		//errno_t err = wcstombs_s(&convertedChars, szFileA, sizeof(szFileA), szFile, _TRUNCATE);
-		//if (err != 0)
-		//{
-		//	MessageBox(hWnd, L"Failed to convert file path to multibyte string.", L"Error", MB_OK);
-		//	return NULL;
-		//}
+		if (bmp) {
+			// 이전 비트맵 메모리 정리
+			DestroyBitmap(bmp);
+		}
 
-		bmp = (LoadedBmp*)malloc(sizeof(LoadedBmp));
+		bmp = (bitmap*)malloc(sizeof(bitmap));
 		if (bmp == NULL) 
 		{
 			MessageBox(hWnd, L"Failed to allocate memory", L"Error", MB_OK);
 			return NULL;
 		}
-		//FILE* fp;
-		//fp = fopen(szFileA, "rb");
-		//if (fp == NULL)
-		//{
-		//	MessageBox(hWnd, L"Failed to open file", L"Error", MB_OK);
-		//	return NULL;
-		//}
-
-		////bmp->origin = (bitmap*)malloc(sizeof(bitmap));
-		//if (read_bitmap(fp, &bmp->origin) != 0)
-		//{
-		//	MessageBox(hWnd, L"Failed to read bitmap", L"Error", MB_OK);
-		//	fclose(fp);
-		//	free(bmp);
-		//	bmp = NULL;
-		//	return NULL;
-		//}
-
-		//bmp->fp = fp;
+		ZeroMemory(bmp, sizeof(bitmap));
 
 		HANDLE hFile = CreateFileW(szFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
 			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -224,6 +218,12 @@ void LoadBitmapWindow(HWND hWnd)
 			if (ReadBitmap(hFile, bmp) != 0)
 			{
 				MessageBox(hWnd, L"No read access to file: %s \n", szFile, L"Error", MB_OK);
+			}
+			else
+			{
+				// 창 내부 사각영역을 무효화시키는 명령어, 
+				// 만약 사각형이 없으면 전부 무효화하는데 이는 WndProc의 메시지 루프에 WM_PAINT 메시지가 전달되도록 함.
+				InvalidateRect(hWnd, NULL, TRUE);
 			}
 		}
 

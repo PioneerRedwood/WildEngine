@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <stdint.h>
 
 //////////////////////////////////////////////////////////////////////
@@ -88,6 +88,51 @@ typedef struct {
   cie_xyz green;
   cie_xyz blue;
 } cie_xyz_triple;
+
+typedef struct {
+
+  uint32_t profile_size;
+
+  uint32_t profile_cmm_type;
+
+  uint32_t profile_version;
+
+  uint32_t profile_class;
+
+  uint32_t color_space;
+
+  uint32_t pcs;
+
+  uint32_t date_created[3];
+
+  uint32_t file_signature;
+
+  uint32_t primary_platform;
+
+  uint32_t flags;
+
+  uint32_t manufacturer;
+
+  uint32_t model;
+
+  uint32_t attribute;
+
+  uint32_t rendering_intent;
+
+  uint32_t illuminant[3];
+
+  uint32_t creator;
+
+} icc_profile_header;
+
+typedef struct {
+
+  icc_profile_header header;
+
+  void* data;
+
+} icc_profile;
+
 
 //////////////////////////////////////////////////////////////////////
 
