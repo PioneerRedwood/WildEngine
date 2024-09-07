@@ -1,50 +1,12 @@
-﻿#include <stdio.h>
+﻿#if 0
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <stdarg.h>
 #include <Windows.h>
 #include <math.h>
 #include "Bitmap.h"
-
-void LogBitmapMessage(LPCWSTR format, ...)
-{
-	va_list args;
-	va_start(args, format);
-
-	LPCWSTR buffer[1024] = { 0 };
-	vsnprintf(buffer, sizeof(buffer), format, args);
-
-	OutputDebugString(buffer);
-
-	va_end(args);
-}
-
-void readGamma(uint8_t* profileData, float* gammaR, float* gammaG, float* gammaB) {
-	// ICC 프로파일의 감마 데이터 파싱하는 방법
-	// ICC 프로파일 구조에 따라 달라질 수 있음
-	// 아래는 간단한 감마 예제 값
-	//*gammaR = 2.2f;
-	//*gammaG = 2.2f;
-	//*gammaB = 2.2f;
-}
-
-void ApplyGamma(uint8_t** pixelData, int width, int height, float gammaR, float gammaG, float gammaB)
-{
-	// 감마 보정값이 0인 경우 기본값 적용
-	if (gammaR <= 0.0f) gammaR = 2.2f;
-	if (gammaG <= 0.0f) gammaG = 2.2f;
-	if (gammaB <= 0.0f) gammaB = 2.2f;
-
-	for (int y = 0; y < height; ++y) {
-		uint8_t* row = pixelData[y];
-		for (int x = 0; x < width; ++x) {
-			uint8_t* pixel = row + x * 3;
-			pixel[0] = (uint8_t)(255 * pow(pixel[0] / 255.0f, 1.0f / gammaR)); // R
-			pixel[1] = (uint8_t)(255 * pow(pixel[1] / 255.0f, 1.0f / gammaG)); // G
-			pixel[2] = (uint8_t)(255 * pow(pixel[2] / 255.0f, 1.0f / gammaB)); // B
-		}
-	}
-}
 
 DWORD ReadFileWithOffset(HANDLE hFile, int size, int offset, void* dst)
 {
@@ -521,52 +483,4 @@ int ReadBitmap(HANDLE hFile, bitmap* bmp)
 	return 0;
 }
 
-void DestroyBitmap(bitmap* b)
-{
-	if (b == NULL) return;
-
-	bitmap_v5_info_header* h = &b->dib_header;
-
-	uint8_t** pixel_data = b->pixel_data;
-	for (int i = 0; i < h->height; ++i)
-	{
-		uint8_t* row = pixel_data[i];
-		free(row);
-		row = NULL;
-	}
-	free(pixel_data);
-	pixel_data = NULL;
-
-	if (b->extra_bit_masks)
-	{
-		free(b->extra_bit_masks);
-		b->extra_bit_masks = NULL;
-	}
-
-	if (b->gap1)
-	{
-		free(b->gap1);
-		b->gap1 = NULL;
-	}
-
-	if (b->gap2)
-	{
-		free(b->gap2);
-		b->gap2 = NULL;
-	}
-
-	if (b->color_table)
-	{
-		free(b->color_table);
-		b->color_table = NULL;
-	}
-
-	if (b->icc_color_profile)
-	{
-		free(b->icc_color_profile);
-		b->icc_color_profile = NULL;
-	}
-
-	free(b);
-	b = NULL;
-}
+#endif

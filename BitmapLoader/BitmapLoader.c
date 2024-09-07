@@ -4,6 +4,9 @@
 #include "framework.h"
 #include "BitmapLoader.h"
 #include "Bitmap.h"
+#include <stdio.h>
+
+#pragma warning(disable: 4996)
 
 #define MAX_LOADSTRING 100
 
@@ -12,7 +15,61 @@ HINSTANCE hInst;                                // 현재 인스턴스입니다.
 WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입니다.
 WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름입니다.
 
-bitmap* bmp;
+bitmap bmp;
+HBITMAP hBitmap = NULL;
+
+HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
+{
+	BITMAPINFOHEADER h = { 0 };
+	h.biSize = sizeof(BITMAPINFOHEADER);
+	h.biWidth = width;
+	h.biHeight = height;
+	h.biPlanes = 1;
+	h.biBitCount = 24;
+	h.biCompression = BI_RGB;
+
+	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, data, (BITMAPINFO*)&h, DIB_RGB_COLORS);
+	return hBmp;
+}
+
+void ReadBitmap(HWND hWnd, const char* path)
+{
+	FILE* fp = fopen(path, "rb");
+	if (fp == NULL) return 1;
+
+	fread(&bmp.header_info, 1, sizeof(bitmap_header_info), fp);
+
+	fread(&bmp.header, 1, sizeof(bitmap_v5_info_header), fp);
+
+	int stride = ((bmp.header.width * 3 + 3) & ~3);
+
+	int totalSize = bmp.header.height * stride;
+
+	// 파일 포인터 픽셀 데이터 위치로 이동
+	fseek(fp, bmp.header_info.pixel_start_offset, SEEK_SET);
+	bmp.pixel_data = (uint8_t*)malloc(totalSize);
+	if (bmp.pixel_data == NULL) {
+		fclose(fp);
+		return;
+	}
+	ZeroMemory(bmp.pixel_data, totalSize);
+	fread(bmp.pixel_data, 1, totalSize, fp);
+
+	fclose(fp);
+
+	HDC hdc = GetDC(hWnd);
+	hBitmap = Create24BitHBITMAP(hdc, bmp.header.width, bmp.header.height, bmp.pixel_data);
+	ReleaseDC(hWnd, hdc);
+}
+
+void drawBitmap(HDC hdc, int dx, int dy)
+{
+	HDC hdcMem = CreateCompatibleDC(hdc);
+	HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hBitmap);
+	BitBlt(hdc, 0, 0, bmp.header.width, bmp.header.height, hdcMem, 0, 0, SRCCOPY);
+	SelectObject(hdcMem, hbmOld);
+	DeleteDC(hdcMem);
+}
 
 // 이 코드 모듈에 포함된 함수의 선언을 전달합니다:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -123,7 +180,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PAINTSTRUCT ps;
 		HDC hdc = BeginPaint(hWnd, &ps);
 		// TODO: 여기에 hdc를 사용하는 그리기 코드를 추가합니다...
-		
+#if 0
 		if (bmp != NULL && bmp->pixel_data != NULL)
 		{
 			uint32_t w = bmp->dib_header.width;
@@ -147,6 +204,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 			}
 		}
+#else
+		drawBitmap(hdc, 0, 0);
+#endif
 
 		EndPaint(hWnd, &ps);
 	}
@@ -180,19 +240,7 @@ void LoadBitmapWindow(HWND hWnd)
 
 	if (GetOpenFileName(&ofn) == TRUE)
 	{
-		if (bmp) {
-			// 이전 비트맵 메모리 정리
-			DestroyBitmap(bmp);
-		}
-
-		bmp = (bitmap*)malloc(sizeof(bitmap));
-		if (bmp == NULL) 
-		{
-			MessageBox(hWnd, L"Failed to allocate memory", L"Error", MB_OK);
-			return NULL;
-		}
-		ZeroMemory(bmp, sizeof(bitmap));
-
+#if 0
 		HANDLE hFile = CreateFileW(szFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
 			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -226,7 +274,13 @@ void LoadBitmapWindow(HWND hWnd)
 				InvalidateRect(hWnd, NULL, TRUE);
 			}
 		}
+#else
+		char path[256];
+		int nLen = (int)wcslen(ofn.lpstrFile);
+		wcstombs(path, ofn.lpstrFile, nLen + 1);
 
-		return NULL;
+		ReadBitmap(hWnd, path);
+		InvalidateRect(hWnd, NULL, TRUE);
+#endif
 	}
 }

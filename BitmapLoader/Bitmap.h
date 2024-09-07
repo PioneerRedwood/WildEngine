@@ -3,6 +3,7 @@
 
 //////////////////////////////////////////////////////////////////////
 
+#pragma pack(push, 4)
 typedef enum {
   //BI_RGB = 0,
   //BI_RLE8 = 1,
@@ -15,15 +16,18 @@ typedef enum {
   BI_CMYKRLE8 = 12,
   BI_CMYKRLE4 = 13,
 } bitmap_compression_method;
+#pragma pack(pop)
 
-// FIXME: Need to be packed 2bytes from integer (default size of enum in C)
+#pragma pack(push, 2)
 typedef enum {
   NONE = 0,
   ERROR_DIFFUSION = 1,
   PANDA = 2,
   SUPER_CIRCLE = 3
 } bitmap_halftoning_algorithm_type;
+#pragma pack(pop)
 
+#pragma pack(push, 4)
 // Fixed-size (7 different versions exist)
 typedef enum {
   // OS21X_BITMAP_HEADER (12 bytes)
@@ -63,6 +67,7 @@ typedef enum {
   BITMAP_V5_INFO_HEADER = 124,
 
 } bitmap_header_type;
+#pragma pack(pop)
 
 // TODO: Not fully understand..
 // Referred: https://en.wikipedia.org/wiki/Gamma_correction, 
@@ -89,53 +94,9 @@ typedef struct {
   cie_xyz blue;
 } cie_xyz_triple;
 
-typedef struct {
-
-  uint32_t profile_size;
-
-  uint32_t profile_cmm_type;
-
-  uint32_t profile_version;
-
-  uint32_t profile_class;
-
-  uint32_t color_space;
-
-  uint32_t pcs;
-
-  uint32_t date_created[3];
-
-  uint32_t file_signature;
-
-  uint32_t primary_platform;
-
-  uint32_t flags;
-
-  uint32_t manufacturer;
-
-  uint32_t model;
-
-  uint32_t attribute;
-
-  uint32_t rendering_intent;
-
-  uint32_t illuminant[3];
-
-  uint32_t creator;
-
-} icc_profile_header;
-
-typedef struct {
-
-  icc_profile_header header;
-
-  void* data;
-
-} icc_profile;
-
-
 //////////////////////////////////////////////////////////////////////
 
+#pragma pack(push, 1)
 // 14 bytes
 typedef struct {
   // Identify the BMP and DIB file is 0x42 0x4D in hexadecimal
@@ -157,6 +118,7 @@ typedef struct {
   uint32_t pixel_start_offset;
 
 } bitmap_header_info;
+#pragma pack(pop)
 
 // BITMAP_CORE_HEADER (12 bytes)
 // Not supported
@@ -562,7 +524,7 @@ typedef struct {
   
   // Immediately follows the Bitmap file header
   // void* dib_header;
-  bitmap_v5_info_header dib_header;
+  bitmap_v5_info_header header;
   
   // 3 or 4 DWORDS (12 or 16 bytes)
   // Present only in case the DIB header is the BITMAPINFOHEADER 
@@ -577,7 +539,11 @@ typedef struct {
   void* gap1;
 
   // Variable size 
+#if 0
   uint8_t** pixel_data;
+#else
+  uint8_t* pixel_data;
+#endif
 
   // Variable size (optional)
   // An artifact of the ICC profile data offset field in the DIB header
