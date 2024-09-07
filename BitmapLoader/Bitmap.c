@@ -11,7 +11,7 @@ void LogBitmapMessage(LPCWSTR format, ...)
 	va_list args;
 	va_start(args, format);
 
-	LPCWSTR buffer[1024] = {0};
+	LPCWSTR buffer[1024] = { 0 };
 	vsnprintf(buffer, sizeof(buffer), format, args);
 
 	OutputDebugString(buffer);
@@ -314,14 +314,40 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 
 	switch (h->compression_method) {
 	case BI_RGB: {
+
+		// 행 크기 - 바이트
+		int row_size = h->width * (h->bits_per_pixel / 8);
+		int padding = (4 - (row_size % 4)) % 4;
+
+		int full_row_size = row_size + padding;
+		int total_size = h->height * full_row_size;
+
 		// bits per pixel: 24 = 3 bytes
 		bmp->pixel_data = (uint8_t**)malloc(h->height * sizeof(uint8_t*));
 		if (bmp->pixel_data == NULL)
 		{
-			LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 열 메모리 생성에 실패 \n");
+			LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 열 메모리 할당 실패 \n");
 			return 1;
 		}
 		ZeroMemory(bmp->pixel_data, h->height * sizeof(uint8_t*));
+
+		uint8_t* pixel_data_block = (uint8_t*)malloc(total_size);
+		if (pixel_data_block == NULL)
+		{
+			free(bmp->pixel_data);
+			LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 전체 픽셀 메모리 할당 실패 \n");
+			return 1;
+		}
+
+		readBytes = ReadFileWithOffset(hFile, sizeof(uint8_t) * total_size, *offset, pixel_data_block);
+		if (readBytes != total_size) {
+			free(bmp->pixel_data);
+			free(pixel_data_block);
+			LogBitmapMessage(L"[ERROR] 픽셀 데이터 읽기 실패 (읽은 크기: %d 파일 오프셋: %d) \n", readBytes, *offset);
+			return 1;
+		}
+
+		*offset = total_size;
 
 		uint8_t rgb_masks[3] = {
 			(h->red_bit_mask >> 16) & 0xFF,
@@ -329,47 +355,19 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 			(h->blue_bit_mask) & 0xFF
 		};
 
-		int row_size = h->width * (h->bits_per_pixel / 8); // bytes
-		int padding = (4 - (row_size % 4)) % 4;
-		
-		for (int i = h->height - 1; i >= 0; --i) 
+		// 열마다 읽기
+		//for (int i = h->height - 1; i >= 0; --i) 
+		for (int i = 0; i < h->height; ++i)
 		{
-			uint8_t* row = (uint8_t*)malloc(row_size);
-			if (row == NULL) 
-			{
-				for (int j = h->height - 1; j > i; --j) {
-					free(bmp->pixel_data[j]);
-				}
-				free(bmp->pixel_data);
-				LogBitmapMessage(L"[ERROR] 이미지 로드를 위한 행 메모리 생성에 실패 \n");
-				return 1;
-			}
-			ZeroMemory(row, row_size);
-
-			int readBytes = ReadFileWithOffset(hFile, sizeof(uint8_t) * row_size, *offset, row);
-
-			if (readBytes != row_size) 
-			{
-				for (int j = h->height - 1; j >= i; --j) {
-					free(bmp->pixel_data[j]);
-				}
-				free(bmp->pixel_data);
-
-				LogBitmapMessage(L"[ERROR] read pixel data failed read size = %d offset: %d \n", readBytes, *offset);
-				return 1;
-			}
-
-			*offset += row_size + padding;
+			uint8_t* row = pixel_data_block + i * full_row_size;
 
 			for (int j = 0; j < row_size; j += 3) {
-				if (j + 2 < row_size) {
-					row[j + 0] = row[j + 0] & rgb_masks[0]; // R
-					row[j + 1] = row[j + 1] & rgb_masks[1]; // G
-					row[j + 2] = row[j + 2] & rgb_masks[2]; // B
-				}
+				row[j + 0] = row[j + 0] & rgb_masks[0]; // R
+				row[j + 1] = row[j + 1] & rgb_masks[1]; // G
+				row[j + 2] = row[j + 2] & rgb_masks[2]; // B
 			}
 
-			bmp->pixel_data[i] = row;
+			bmp->pixel_data[h->height - 1 - i] = row;
 		}
 		break;
 	}
@@ -436,7 +434,7 @@ int ReadBitmapV5InfoHeader(HANDLE hFile, bitmap* bmp, int* offset) {
 	default: break;
 	}
 
-	ApplyGamma(bmp->pixel_data, h->width, h->height, h->gamma_red, h->gamma_green, h->gamma_blue);
+	//ApplyGamma(bmp->pixel_data, h->width, h->height, h->gamma_red, h->gamma_green, h->gamma_blue);
 	return 0;
 }
 

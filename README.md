@@ -1,8 +1,9 @@
 # BitmapLoader
 
 ## Requirements 
-- Written in pure C
-- Run on Windows
+- C로 작성
+- 윈도우에서 돌아가도록
+- GDI 사용할 것. 
 
 ## ToDo
 1. Understand BMP. 

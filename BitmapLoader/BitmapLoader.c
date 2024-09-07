@@ -129,18 +129,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			uint32_t w = bmp->dib_header.width;
 			uint32_t h = bmp->dib_header.height;
 			uint8_t** pixel = bmp->pixel_data;
-			uint32_t bits_per_pixel = bmp->dib_header.bits_per_pixel;
+			uint32_t bpp = (bmp->dib_header.bits_per_pixel / 8);
 
-			for (int y = 0; y < h; ++y) 
+			for (int y = 0; y < h; ++y)
 			{
 				uint8_t* row = pixel[y];
 				for (int x = 0; x < w; ++x)
 				{
-					uint8_t r = row[x * (bits_per_pixel / 8) + 0];
-					uint8_t g = row[x * (bits_per_pixel / 8) + 1];
-					uint8_t b = row[x * (bits_per_pixel / 8) + 2];
+					uint8_t r = row[x * bpp + 0];
+					uint8_t g = row[x * bpp + 1];
+					uint8_t b = row[x * bpp + 2];
 
-					// BGR -> RGB
+					// RGB -> BGR
 					COLORREF color = RGB(b, g, r);
 
 					SetPixel(hdc, x, y, color);
