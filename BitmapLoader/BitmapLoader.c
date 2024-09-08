@@ -5,10 +5,14 @@
 #include "BitmapLoader.h"
 #include "Bitmap.h"
 #include <stdio.h>
+#include <math.h>
 
 #pragma warning(disable: 4996)
 
 #define MAX_LOADSTRING 100
+#define MAX_ZOOM_LEVEL 8
+
+#define USE_BILINEAR_INTERPOLATION true
 
 // 전역 변수:
 HINSTANCE hInst;                                // 현재 인스턴스입니다.
@@ -17,6 +21,9 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름�
 
 bitmap bmp;
 HBITMAP hBitmap = NULL;
+HBITMAP scaledBitmap[8] = { 0 };
+double scaleFactors[8] = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5 };
+int zoomLevel = 0;
 
 HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 {
@@ -30,6 +37,91 @@ HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 
 	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, data, (BITMAPINFO*)&h, DIB_RGB_COLORS);
 	return hBmp;
+}
+
+HBITMAP ResizeBitmap(HDC hdc, bitmap* bmp, int newWidth, int newHeight)
+{
+	if (bmp->pixel_data == NULL) return NULL;
+
+	int originalWidth = bmp->header.width;
+	int originalHeight = bmp->header.height;
+	uint8_t* src = bmp->pixel_data;
+
+	float xRatio = (float)originalWidth / (float)newWidth;
+	float yRatio = (float)originalHeight / (float)newHeight;
+
+	uint8_t* newPixelData = (uint8_t*)malloc(newWidth * newHeight * 3); // BI_RGB
+	if (newPixelData == NULL)
+	{
+		return NULL;
+	}
+	memset(newPixelData, 0, newWidth * newHeight * 3);
+
+#if 1
+	// 가장 가까운 이웃값 사용
+	for (int y = 0; y < newHeight; ++y)
+	{
+		for (int x = 0; x < newWidth; ++x)
+		{
+			// 변경할 크기 비율에 따라 근사한 좌표를 구함
+			int nearestX = (int)(x * xRatio);
+			int nearestY = (int)(y * yRatio);
+
+			// 원본 인덱스
+			int originalIndex = (nearestY * originalWidth + nearestX) * 3;
+
+			// 새로운 인덱스
+			int newIndex = (y * newWidth + x) * 3;
+
+			newPixelData[newIndex] = src[originalIndex];
+			newPixelData[newIndex + 1] = src[originalIndex + 1];
+			newPixelData[newIndex + 2] = src[originalIndex + 2];
+		}
+	}
+#else
+	// 이진선형 보간법 사용 - 오류 있으니 수정 바람
+	for (int y = 0; y < newHeight; ++y)
+	{
+		for (int x = 0; x < newWidth; ++x)
+		{
+			float gx = x * xRatio;
+			float gy = y * yRatio;
+			int gxi = (int)gx;
+			int gyi = (int)gy;
+
+			// 인접한 네 개의 픽셀 인덱스 계산
+			int i00 = (gyi * originalWidth + gxi) * 3;
+			int i10 = (gyi * originalWidth + (gxi + 1)) * 3;
+			int i01 = ((gyi + 1) * originalWidth + gxi) * 3;
+			int i11 = ((gyi + 1) * originalWidth + (gxi + 1)) * 3;
+
+			// 비율 계산
+			float xDiff = gx - gxi;
+			float yDiff = gy - gyi;
+
+			for (int i = 0; i < 3; ++i)
+			{
+				// 이진 선형 보간 공식 적용
+				float value = (src[i00 + i] * (i - xDiff) * (1 - yDiff)) +
+											(src[i10 + i] * xDiff * (1 - yDiff)) +
+											(src[i01 + i] * (1 - xDiff) * yDiff) +
+											(src[i11 + i] * xDiff * yDiff);
+				newPixelData[(y * newWidth + x) * 3 + i] = (uint8_t)value;
+			}
+		}
+	}
+#endif
+	BITMAPINFOHEADER h = { 0 };
+	h.biSize = sizeof(BITMAPINFOHEADER);
+	h.biWidth = newWidth;
+	h.biHeight = newHeight;
+	h.biPlanes = 1;
+	h.biBitCount = 24;
+	h.biCompression = BI_RGB;
+
+	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, newPixelData, (BITMAPINFO*)&h, DIB_RGB_COLORS);
+	return hBmp;
+
 }
 
 void ReadBitmap(HWND hWnd, const char* path)
@@ -62,13 +154,39 @@ void ReadBitmap(HWND hWnd, const char* path)
 	ReleaseDC(hWnd, hdc);
 }
 
-void drawBitmap(HDC hdc, int dx, int dy)
+void DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp)
 {
 	HDC hdcMem = CreateCompatibleDC(hdc);
-	HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hBitmap);
-	BitBlt(hdc, 0, 0, bmp.header.width, bmp.header.height, hdcMem, 0, 0, SRCCOPY);
+	HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+	BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
 	SelectObject(hdcMem, hbmOld);
 	DeleteDC(hdcMem);
+}
+
+void ZoomInOut(HDC hdc)
+{
+	double scale = scaleFactors[zoomLevel];
+
+	int newWidth = (int)(bmp.header.width * scale);
+	int newHeight = (int)(bmp.header.height * scale);
+
+#if 1
+	scaledBitmap[zoomLevel] = ResizeBitmap(hdc, &bmp, newWidth, newHeight);
+	DrawBitmap(hdc, newWidth, newHeight, scaledBitmap[zoomLevel]);
+#else
+	BITMAPINFOHEADER h = { 0 };
+	h.biSize = sizeof(BITMAPINFOHEADER);
+	h.biWidth = bmp.header.width;
+	h.biHeight = bmp.header.height;
+	h.biPlanes = 1;
+	h.biBitCount = 24;
+	h.biCompression = BI_RGB;
+
+	StretchDIBits(hdc,
+		0, 0, newWidth, newHeight,
+		0, 0, bmp.header.width, bmp.header.height,
+		bmp.pixel_data, (BITMAPINFO*)&h, DIB_RGB_COLORS, SRCCOPY);
+#endif
 }
 
 // 이 코드 모듈에 포함된 함수의 선언을 전달합니다:
@@ -205,11 +323,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 		}
 #else
-		drawBitmap(hdc, 0, 0);
+		//DrawBitmap(hdc, bmp.header.width, bmp.header.height, hBitmap);
+		ZoomInOut(hdc);
 #endif
 
 		EndPaint(hWnd, &ps);
 	}
+	break;
+	case WM_MOUSEWHEEL:
+		if (GET_WHEEL_DELTA_WPARAM(wParam) > 0)
+		{
+			if (zoomLevel < 7) zoomLevel++;
+		}
+		else
+		{
+			if (zoomLevel > 0) zoomLevel--;
+		}
+		InvalidateRect(hWnd, NULL, TRUE);
 	break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
