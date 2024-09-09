@@ -39,6 +39,62 @@ HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 	return hBmp;
 }
 
+// 아래 조사한 것으로 구현한 것과 다른점은 스케일값을 입력 받아 새로운 비트맵을 생성하는 것.
+HBITMAP StretchBitmap(HDC hdc, bitmap* bmp, float scale)
+{
+	if (bmp->pixel_data == NULL) return NULL;
+
+	int originalWidth = bmp->header.width;
+	int originalHeight = bmp->header.height;
+	uint8_t* src = bmp->pixel_data;
+
+	// 스케일 값을 곱하는 것은 버퍼 오버런을 발생시킴. 스케일값이 1 초과시 원본 데이터의 범위를 넘어감.
+	int scaledWidth = (int)(originalWidth * scale);
+	int scaledHeight = (int)(originalHeight * scale);
+
+	int newBitmapSize = scaledWidth * scaledHeight * 3;
+	uint8_t* newPixelData = (uint8_t*)malloc(newBitmapSize); // BI_RGB
+	if (newPixelData == NULL)
+	{
+		return NULL;
+	}
+	memset(newPixelData, 0, newBitmapSize);
+
+	// 검은 결과만 출력
+	for (int y = 0; y < scaledHeight; ++y)
+	{
+		for (int x = 0; x < scaledWidth; ++x)
+		{
+			// 새로 스케일된 픽셀 값은 원본 픽셀로부터 가져와야 함
+			// 확대: 기존 픽셀이 여러 픽셀로 쪼개지는 듯 보임 
+			// 축소: 기존 여러 픽셀이 하나의 픽셀로 합쳐지는 듯 보임
+
+			// 아래 수정 바람.
+			int scaledX = (int)(x * scale);
+			int scaledY = (int)(y * scale);
+
+			int srcIdx = (scaledY * originalWidth + scaledX) * 3;
+			int scaledIdx = (y * scaledWidth + x) * 3;
+
+			newPixelData[scaledIdx] = src[srcIdx];
+			newPixelData[scaledIdx + 1] = src[srcIdx + 1];
+			newPixelData[scaledIdx + 2] = src[srcIdx + 2];
+		}
+	}
+
+	BITMAPINFOHEADER h = { 0 };
+	h.biSize = sizeof(BITMAPINFOHEADER);
+	h.biWidth = scaledWidth;
+	h.biHeight = scaledHeight;
+	h.biPlanes = 1;
+	h.biBitCount = 24;
+	h.biCompression = BI_RGB;
+
+	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, newPixelData, (BITMAPINFO*)&h, DIB_RGB_COLORS);
+	return hBmp;
+}
+
+// 보간
 HBITMAP ResizeBitmap(HDC hdc, bitmap* bmp, int newWidth, int newHeight)
 {
 	if (bmp->pixel_data == NULL) return NULL;
@@ -121,7 +177,6 @@ HBITMAP ResizeBitmap(HDC hdc, bitmap* bmp, int newWidth, int newHeight)
 
 	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, newPixelData, (BITMAPINFO*)&h, DIB_RGB_COLORS);
 	return hBmp;
-
 }
 
 void ReadBitmap(HWND hWnd, const char* path)
@@ -170,9 +225,17 @@ void ZoomInOut(HDC hdc)
 	int newWidth = (int)(bmp.header.width * scale);
 	int newHeight = (int)(bmp.header.height * scale);
 
+	HBITMAP bmpWillBeDrew = scaledBitmap[zoomLevel];
 #if 1
-	scaledBitmap[zoomLevel] = ResizeBitmap(hdc, &bmp, newWidth, newHeight);
-	DrawBitmap(hdc, newWidth, newHeight, scaledBitmap[zoomLevel]);
+	
+	if (bmpWillBeDrew) {
+		// 이미 존재하면 할당 해제, 여전히 메모리 계속 늘어남 수정 바람.
+		DeleteObject(bmpWillBeDrew);
+	}
+
+	//bmpWillBeDrew = ResizeBitmap(hdc, &bmp, newWidth, newHeight);
+	bmpWillBeDrew = StretchBitmap(hdc, &bmp, (float)scale);
+	DrawBitmap(hdc, newWidth, newHeight, bmpWillBeDrew);
 #else
 	BITMAPINFOHEADER h = { 0 };
 	h.biSize = sizeof(BITMAPINFOHEADER);
