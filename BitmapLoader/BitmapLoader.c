@@ -10,7 +10,7 @@
 #pragma warning(disable: 4996)
 
 #define MAX_LOADSTRING 100
-#define MAX_ZOOM_LEVEL 8
+#define MAX_ZOOM_LEVEL 16
 
 #define USE_BILINEAR_INTERPOLATION true
 
@@ -22,7 +22,8 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 // 비트맵 관련 함수 선언:
 void								LoadBitmapWindow(HWND hWnd);
 HBITMAP							Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data);
-void								DrawResizedBitmap(HDC hdc, int newWidth, int newHeight);
+void								DrawResizedBitmap(HDC hdc, double scale);
+void								ClearCachedScaledBitmaps(HDC hdc);
 void								ReadBitmap(HWND hWnd, const char* path);
 void								DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp);
 void								MosaicBitmap(HWND hWnd);
@@ -33,12 +34,13 @@ WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입
 WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름입니다.
 
 bitmap bmp;
-HBITMAP hBitmap = NULL, hResizedBitmap = NULL;
-uint8_t* pResizedPixelDataHolder = NULL;
+HBITMAP hBitmap = NULL;
+
+HBITMAP zoomedBitmaps[MAX_ZOOM_LEVEL] = { NULL };
+int currentZoomLevel = (int)(MAX_ZOOM_LEVEL / 2);
+double zoomFactors[MAX_ZOOM_LEVEL] = { 0.01, 0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 4.0, 8.0, 16.0, 32.0 };
+
 HBITMAP hMosaicBitmap = NULL;
-HBITMAP zoomedBitmaps[8] = { NULL };
-int currentZoomLevel = 3;
-double zoomFactors[8] = { 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0 };
 BOOL isMosaic = FALSE;
 
 HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
@@ -55,8 +57,7 @@ HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 	return hBmp;
 }
 
-// 보간
-void DrawResizedBitmap(HDC hdc, int newWidth, int newHeight)
+void DrawResizedBitmap(HDC hdc, double scale)
 {
 	if (bmp.pixel_data == NULL) return;
 
@@ -64,28 +65,47 @@ void DrawResizedBitmap(HDC hdc, int newWidth, int newHeight)
 	int height = bmp.header.height;
 	uint8_t* src = bmp.pixel_data;
 
+	int newWidth = (int)(width * scale);
+	int newHeight = (int)(height * scale);
+
+	// 스케일된 비트맵의 가로/세로가 4의 배수가 아닌 경우 크기 조정
+	int widthPadding = newWidth % 4;
+	int heightPadding = newHeight % 4;
+
+	// 예를 들어, 41 -> 44, 42 -> 44, 43 -> 44
+	if (widthPadding != 0) {
+		newWidth = (int)(newWidth / 4) * 4 + 4;
+	}
+	if (heightPadding != 0) {
+		newHeight = (int)(newHeight / 4) * 4 + 4;
+	}
+
+	HBITMAP hCachedScaledBitmap = zoomedBitmaps[currentZoomLevel];
+
+	if (zoomedBitmaps[currentZoomLevel] != NULL) {
+		DrawBitmap(hdc, newWidth, newHeight, hCachedScaledBitmap);
+	}
+
 	float xRatio = (float)width / (float)newWidth;
 	float yRatio = (float)height / (float)newHeight;
 
 	int bbp = bmp.header.bits_per_pixel / 8;
+	const int totalSize = newWidth * newHeight * bbp;
 
-	uint8_t* newPixelData = (uint8_t*)malloc(newWidth * newHeight * bbp); // BI_RGB
+	uint8_t* newPixelData = (uint8_t*)malloc(totalSize); // BI_RGB
 	if (newPixelData == NULL) return;
-	memset(newPixelData, 0, newWidth * newHeight * bbp);
+	memset(newPixelData, 0, totalSize);
 
 #if 1
 	// 가장 가까운 이웃값 사용
 	for (int y = 0; y < newHeight; ++y) {
 		for (int x = 0; x < newWidth; ++x) {
 			// 변경할 크기 비율에 따라 근사한 좌표를 구함
-
 			int nearestX = (int)(x * xRatio);
 			int nearestY = (int)(y * yRatio);
 
 			if (nearestX >= width) nearestX = width - 1;
 			if (nearestY >= height) nearestY = height - 1;
-
-
 
 			// 원본 인덱스
 			int originalIndex = (nearestY * width + nearestX) * bbp;
@@ -109,10 +129,10 @@ void DrawResizedBitmap(HDC hdc, int newWidth, int newHeight)
 			int gyi = (int)gy;
 
 			// 인접한 네 개의 픽셀 인덱스 계산
-			int i00 = (gyi * originalWidth + gxi) * 3;
-			int i10 = (gyi * originalWidth + (gxi + 1)) * 3;
-			int i01 = ((gyi + 1) * originalWidth + gxi) * 3;
-			int i11 = ((gyi + 1) * originalWidth + (gxi + 1)) * 3;
+			int i00 = (gyi * width + gxi) * 3;
+			int i10 = (gyi * width + (gxi + 1)) * 3;
+			int i01 = ((gyi + 1) * width + gxi) * 3;
+			int i11 = ((gyi + 1) * width + (gxi + 1)) * 3;
 
 			// 비율 계산
 			float xDiff = gx - gxi;
@@ -122,9 +142,9 @@ void DrawResizedBitmap(HDC hdc, int newWidth, int newHeight)
 			{
 				// 이진 선형 보간 공식 적용
 				float value = (src[i00 + i] * (i - xDiff) * (1 - yDiff)) +
-											(src[i10 + i] * xDiff * (1 - yDiff)) +
-											(src[i01 + i] * (1 - xDiff) * yDiff) +
-											(src[i11 + i] * xDiff * yDiff);
+					(src[i10 + i] * xDiff * (1 - yDiff)) +
+					(src[i01 + i] * (1 - xDiff) * yDiff) +
+					(src[i11 + i] * xDiff * yDiff);
 				newPixelData[(y * newWidth + x) * 3 + i] = (uint8_t)value;
 			}
 		}
@@ -138,9 +158,24 @@ void DrawResizedBitmap(HDC hdc, int newWidth, int newHeight)
 	h.biBitCount = bmp.header.bits_per_pixel;
 	h.biCompression = BI_RGB;
 
-	hResizedBitmap = CreateDIBitmap(hdc, &h, CBM_INIT, newPixelData, (BITMAPINFO*)&h, DIB_RGB_COLORS);
-	DrawBitmap(hdc, newWidth, newHeight, hResizedBitmap);
-	pResizedPixelDataHolder = newPixelData;
+	HBITMAP hScaledBitmap = CreateDIBitmap(hdc, &h, CBM_INIT, newPixelData, (BITMAPINFO*)&h, DIB_RGB_COLORS);
+	DrawBitmap(hdc, newWidth, newHeight, hScaledBitmap);
+	zoomedBitmaps[currentZoomLevel] = hScaledBitmap;
+}
+
+// 캐시된 스케일된 비트맵 삭제
+void ClearCachedScaledBitmaps(HDC hdc) {
+	HDC hdcMem = CreateCompatibleDC(hdc);
+	
+	for (int i = 0; i < MAX_ZOOM_LEVEL; ++i) {
+		HBITMAP hCachedBitmap = zoomedBitmaps[i];
+		if (hCachedBitmap != NULL) {
+			HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hCachedBitmap);
+			DeleteObject(hbmOld);
+			zoomedBitmaps[i] = NULL;
+		}			
+	}
+	DeleteDC(hdcMem);
 }
 
 void ReadBitmap(HWND hWnd, const char* path)
@@ -156,8 +191,9 @@ void ReadBitmap(HWND hWnd, const char* path)
 
 	//int stride = ((bmp.header.width * 3 + 3) & ~3);
 	//int totalSize = bmp.header.height * stride;
-	
+
 	int bbp = bmp.header.bits_per_pixel / 8;
+	int rowSize = bmp.header.width * bbp + padding;
 	int totalSize = ((bmp.header.width * bbp) + padding) * bmp.header.height; // BI_RGB
 
 	// 파일 포인터 픽셀 데이터 위치로 이동
@@ -169,7 +205,18 @@ void ReadBitmap(HWND hWnd, const char* path)
 	}
 	ZeroMemory(bmp.pixel_data, totalSize);
 
-	fread(bmp.pixel_data, 1, totalSize, fp);
+	// 패딩이 존재하는 경우에는 패딩을 제외한 픽셀 데이터만 복사
+	if (padding == 0) {
+		fread(bmp.pixel_data, 1, totalSize, fp);
+	}
+	else {
+		for (int y = 0; y < bmp.header.height; ++y) {
+			void* offset = bmp.pixel_data + (y * bmp.header.width * bbp);
+			fread(offset, 1, bmp.header.width * bbp, fp);
+			fseek(fp, padding, SEEK_CUR);
+		}
+	}
+	
 	fclose(fp);
 
 	HDC hdc = GetDC(hWnd);
@@ -293,8 +340,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wmId)
 		{
 		case ID_FILE_LOADBITMAPFILE:
+		{
+			HDC hdc = GetDC(hWnd);
+			ClearCachedScaledBitmaps(hdc);
+			ReleaseDC(hWnd, hdc);
+
 			LoadBitmapWindow(hWnd);
-			break;
+		}
+		break;
 		case ID_FILE_MOSAIC:
 			MosaicBitmap(hWnd);
 			break;
@@ -322,9 +375,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		//DrawBitmap(hdc, bmp.header.width, bmp.header.height, hBitmap);
 
 		double scale = zoomFactors[currentZoomLevel];
-		int newWidth = (int)(bmp.header.width * scale);
-		int newHeight = (int)(bmp.header.height * scale);
-		DrawResizedBitmap(hdc, newWidth, newHeight);
+		DrawResizedBitmap(hdc, scale);
 
 		EndPaint(hWnd, &ps);
 	}
@@ -333,15 +384,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (GET_WHEEL_DELTA_WPARAM(wParam) > 0)
 		{
 			// Zoom in
-			if (currentZoomLevel < 7) currentZoomLevel++;
+			if (currentZoomLevel < (MAX_ZOOM_LEVEL - 1)) currentZoomLevel++;
 		}
 		else
 		{
 			// Zoom out
-			if (currentZoomLevel > 0) currentZoomLevel--; // Not ready for zooming out
+			if (currentZoomLevel > 0) currentZoomLevel--;
 		}
 		InvalidateRect(hWnd, NULL, TRUE);
-	break;
+		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		break;
@@ -521,7 +572,7 @@ void MosaicBitmap(HWND hWnd)
 			// 인덱스가 배열을 벗어났다면 나머지 처리
 
 			// 영향을 받는 픽셀 인덱스 구하기
-			
+
 		}
 	}
 	free(indice);
