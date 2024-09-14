@@ -38,7 +38,7 @@ HBITMAP hBitmap = NULL;
 
 HBITMAP zoomedBitmaps[MAX_ZOOM_LEVEL] = { NULL };
 int currentZoomLevel = (int)(MAX_ZOOM_LEVEL / 2);
-double zoomFactors[MAX_ZOOM_LEVEL] = { 0.01, 0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 4.0, 8.0, 16.0, 32.0 };
+double zoomFactors[MAX_ZOOM_LEVEL] = { 0.01, 0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 6.0, 8.0 };
 
 HBITMAP hMosaicBitmap = NULL;
 BOOL isMosaic = FALSE;
@@ -57,6 +57,14 @@ HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 	return hBmp;
 }
 
+uint8_t GetColor(int w, int x, int y, int colorPosition) {
+	return bmp.pixel_data[w * y + (x * 3) + colorPosition];
+}
+
+void SetColor(int w, int x, int y, int colorPosition, int color, uint8_t* dst) {
+	dst[w * y + (x * 3) + colorPosition] = color;
+}
+
 void DrawResizedBitmap(HDC hdc, double scale)
 {
 	if (bmp.pixel_data == NULL) return;
@@ -68,18 +76,6 @@ void DrawResizedBitmap(HDC hdc, double scale)
 	int newWidth = (int)(width * scale);
 	int newHeight = (int)(height * scale);
 
-	// 스케일된 비트맵의 가로/세로가 4의 배수가 아닌 경우 크기 조정
-	int widthPadding = newWidth % 4;
-	int heightPadding = newHeight % 4;
-
-	// 예를 들어, 41 -> 44, 42 -> 44, 43 -> 44
-	if (widthPadding != 0) {
-		newWidth = (int)(newWidth / 4) * 4 + 4;
-	}
-	if (heightPadding != 0) {
-		newHeight = (int)(newHeight / 4) * 4 + 4;
-	}
-
 	HBITMAP hCachedScaledBitmap = zoomedBitmaps[currentZoomLevel];
 
 	if (zoomedBitmaps[currentZoomLevel] != NULL) {
@@ -89,8 +85,12 @@ void DrawResizedBitmap(HDC hdc, double scale)
 	float xRatio = (float)width / (float)newWidth;
 	float yRatio = (float)height / (float)newHeight;
 
+	// 4의 배수를 맞춰주기 위한 변수 설정
+	int oldStride = ((bmp.header.width * 3 + 3) & ~3);
+	int newStride = ((newWidth * 3 + 3) & ~3);
+
 	int bbp = bmp.header.bits_per_pixel / 8;
-	const int totalSize = newWidth * newHeight * bbp;
+	const int totalSize = newStride * newHeight * bbp;
 
 	uint8_t* newPixelData = (uint8_t*)malloc(totalSize); // BI_RGB
 	if (newPixelData == NULL) return;
@@ -104,17 +104,13 @@ void DrawResizedBitmap(HDC hdc, double scale)
 			int nearestX = (int)(x * xRatio);
 			int nearestY = (int)(y * yRatio);
 
-			if (nearestX >= width) nearestX = width - 1;
-			if (nearestY >= height) nearestY = height - 1;
+			uint8_t b = GetColor(oldStride, nearestX, nearestY, 0);
+			uint8_t g = GetColor(oldStride, nearestX, nearestY, 1);
+			uint8_t r = GetColor(oldStride, nearestX, nearestY, 2);
 
-			// 원본 인덱스
-			int originalIndex = (nearestY * width + nearestX) * bbp;
-			// 새로운 인덱스
-			int newIndex = (y * newWidth + x) * bbp;
-
-			newPixelData[newIndex] = src[originalIndex];
-			newPixelData[newIndex + 1] = src[originalIndex + 1];
-			newPixelData[newIndex + 2] = src[originalIndex + 2];
+			SetColor(newStride, x, y, 0, b, newPixelData);
+			SetColor(newStride, x, y, 1, g, newPixelData);
+			SetColor(newStride, x, y, 2, r, newPixelData);
 		}
 	}
 #else
@@ -186,7 +182,7 @@ void ReadBitmap(HWND hWnd, const char* path)
 	fread(&bmp.header_info, 1, sizeof(bitmap_header_info), fp);
 
 	fread(&bmp.header, 1, sizeof(bitmap_v5_info_header), fp);
-
+#if 0
 	int padding = bmp.header.width % 4;
 
 	//int stride = ((bmp.header.width * 3 + 3) & ~3);
@@ -216,6 +212,21 @@ void ReadBitmap(HWND hWnd, const char* path)
 			fseek(fp, padding, SEEK_CUR);
 		}
 	}
+#else
+	int stride = ((bmp.header.width * 3 + 3) & ~3);
+	int totalSize = stride * 3 * bmp.header.height;
+
+	// 파일 포인터 픽셀 데이터 위치로 이동
+	fseek(fp, bmp.header_info.pixel_start_offset, SEEK_SET);
+	bmp.pixel_data = (uint8_t*)malloc(totalSize);
+	if (bmp.pixel_data == NULL) {
+		fclose(fp);
+		return;
+	}
+	memset(bmp.pixel_data, 0, totalSize);
+
+	fread(bmp.pixel_data, 1, totalSize, fp);
+#endif
 	
 	fclose(fp);
 
@@ -470,7 +481,7 @@ void LoadBitmapWindow(HWND hWnd)
 // 모자이크 레벨이 높을수록 선명도가 낮아지는 것. 최대 5단계까지
 void MosaicBitmap(HWND hWnd)
 {
-	if (bmp.pixel_data == NULL) return NULL;
+	if (bmp.pixel_data == NULL) return;
 
 	// 토글 모자이크 변수
 	if (isMosaic) {
@@ -493,7 +504,7 @@ void MosaicBitmap(HWND hWnd)
 	const int bmpSize = width * height * 3;
 
 	uint8_t* newPixelData = (uint8_t*)malloc(bmpSize);
-	if (newPixelData == NULL) return NULL;
+	if (newPixelData == NULL) return;
 	memset(newPixelData, 0, bmpSize);
 
 #if 0
