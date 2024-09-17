@@ -182,39 +182,9 @@ void ReadBitmap(HWND hWnd, const char* path)
 	fread(&bmp.header_info, 1, sizeof(bitmap_header_info), fp);
 
 	fread(&bmp.header, 1, sizeof(bitmap_v5_info_header), fp);
-#if 0
-	int padding = bmp.header.width % 4;
 
-	//int stride = ((bmp.header.width * 3 + 3) & ~3);
-	//int totalSize = bmp.header.height * stride;
-
-	int bbp = bmp.header.bits_per_pixel / 8;
-	int rowSize = bmp.header.width * bbp + padding;
-	int totalSize = ((bmp.header.width * bbp) + padding) * bmp.header.height; // BI_RGB
-
-	// 파일 포인터 픽셀 데이터 위치로 이동
-	fseek(fp, bmp.header_info.pixel_start_offset, SEEK_SET);
-	bmp.pixel_data = (uint8_t*)malloc(totalSize);
-	if (bmp.pixel_data == NULL) {
-		fclose(fp);
-		return;
-	}
-	ZeroMemory(bmp.pixel_data, totalSize);
-
-	// 패딩이 존재하는 경우에는 패딩을 제외한 픽셀 데이터만 복사
-	if (padding == 0) {
-		fread(bmp.pixel_data, 1, totalSize, fp);
-	}
-	else {
-		for (int y = 0; y < bmp.header.height; ++y) {
-			void* offset = bmp.pixel_data + (y * bmp.header.width * bbp);
-			fread(offset, 1, bmp.header.width * bbp, fp);
-			fseek(fp, padding, SEEK_CUR);
-		}
-	}
-#else
 	int stride = ((bmp.header.width * 3 + 3) & ~3);
-	int totalSize = stride * 3 * bmp.header.height;
+	int totalSize = stride * bmp.header.height;
 
 	// 파일 포인터 픽셀 데이터 위치로 이동
 	fseek(fp, bmp.header_info.pixel_start_offset, SEEK_SET);
@@ -224,9 +194,7 @@ void ReadBitmap(HWND hWnd, const char* path)
 		return;
 	}
 	memset(bmp.pixel_data, 0, totalSize);
-
 	fread(bmp.pixel_data, 1, totalSize, fp);
-#endif
 	
 	fclose(fp);
 

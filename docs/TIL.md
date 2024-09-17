@@ -50,3 +50,11 @@ Platform 별 Texture Compression
 - [Paint.Net](https://www.getpaint.net/doc/latest/index.html) - 무료 이미지 에디터
 - [FFMPEG](https://www.ffmpeg.org/) - 무료 멀티미디어 인코더/디코더
 - [ImageMacick](https://imagemagick.org/index.php) - 무료 이미지 에디터
+
+## FFMPEG 사용하여 동영상을 비트맵으로 변환
+- [메인 옵션](https://ffmpeg.org/ffmpeg.html#Main-options)
+
+영상을 입력(`-i .\Dresden.mp4`)으로 하여 초당 2프레임(`-r 2`), 크기를 너비와 높이 둘다 절반으로 (`-vf scale=iw/2:ih/2`) 출력 비트맵 픽셀 포맷은 BGR24로 (`-pix_fmt bgr24`) 변환하는 명령어다. 
+```shell
+ffmpeg -i .\Dresden.mp4 -r 2 -vf scale=iw/2:ih/2 -pix_fmt bgr24 .\dresden-museum-clock\clock%02d.bmp
+```
