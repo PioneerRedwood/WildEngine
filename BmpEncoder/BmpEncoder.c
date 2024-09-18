@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <memory.h>
 #include <stdbool.h>
+#include <string.h>
 
 // TODO: 비트맵 로드에 필요한 구조체 선언
 #pragma pack(push, 1)
@@ -20,9 +21,9 @@ typedef struct {
 } frame_header;
 
 typedef struct {
-	uint16_t size;
-	uint8_t total_frame_count;
-	uint8_t fps;
+	uint32_t size;
+	uint16_t total_frame_count;
+	uint16_t fps;
 } movie_header;
 
 typedef struct {
@@ -90,6 +91,14 @@ bool LoadBitmap(bitmap* bmp, const char* path) {
 	return true;
 }
 
+/*
+입력 인자 예시
+small.bm - "C:\source\BitmapLoader\BitmapLoader\resources\small_1.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_2.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_3.bmp" "-o" "small.bm"
+dresden-clock.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock04.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock05.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock06.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock07.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock08.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock09.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock10.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock11.bmp" "-o" "dresden-clock.bm"
+// TODO: 사이즈가 다른 비트맵 로드할 것 (홀수 짝수)
+// TODO: 사이즈가 엄청 큰 것도 해볼 것 엄청 많은 양의 비트맵도 시도해볼것 (300MB이상)
+*/
+
 int main(int argc, char** argv)
 {
 	// TODO: 입력 인자 갯수 확인
@@ -98,15 +107,31 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	// TODO: 입력 인자 중에서 출력 파일이 지정되지 않은 경우 종료
+	// -o 이후의 바로 다음의 입력 문자열은 파일 경로이며, 그 이후의 인자는 무시됨.
+	const char* outfile = NULL;
+	int num_frames = 0;
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "-o") == 0 && ((i + 1) < argc)) {
+			outfile = argv[i + 1];
+			num_frames = i - 1;
+			break;
+		}
+	}
+
+	if (outfile == NULL) {
+		printf("잘못된 입력: -o 인자 뒤에 출력할 파일 경로를 입력하십시오. \n");
+		return 1;
+	}
+
 	// TODO: 출력 파일 포인터 생성
-	FILE* fp = fopen("small.bm", "wb");
+	FILE* fp = fopen(outfile, "wb");
 	if (fp == NULL) {
 		printf("파일을 쓰기 형식으로 열 수 없습니다. \n");
 		return 1;
 	}
 
 	// TODO: 비트맵 정보 저장할 프레임 배열 생성
-	int num_frames = argc - 1;
 	movie mv = { 0 };
 	mv.frames = (frame*)malloc(num_frames * sizeof(frame));
 	if (mv.frames == NULL) { return 1; }

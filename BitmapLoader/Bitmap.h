@@ -559,3 +559,25 @@ typedef struct {
 } bitmap;
 
 //////////////////////////////////////////////////////////////////////
+
+typedef struct {
+  uint32_t width;
+  uint32_t height;
+} frame_header;
+
+typedef struct {
+  uint32_t size;
+  uint16_t total_frame_count;
+  uint16_t fps;
+} movie_header;
+
+typedef struct {
+  frame_header header;
+  uint8_t* pixel_data;
+  HBITMAP bmp;
+} frame;
+
+typedef struct {
+  movie_header header;
+  frame* frames;
+} movie;

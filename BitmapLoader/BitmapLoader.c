@@ -20,13 +20,15 @@ BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 
 // 비트맵 관련 함수 선언:
-void								LoadBitmapWindow(HWND hWnd);
+void								OpenBitmapSelectWindow(HWND hWnd);
+void								OpenBitmapMovieSelectWindow(HWND hWnd);
 HBITMAP							Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data);
 void								DrawResizedBitmap(HDC hdc, double scale);
 void								ClearCachedScaledBitmaps(HDC hdc);
 void								ReadBitmap(HWND hWnd, const char* path);
 void								DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp);
 void								MosaicBitmap(HWND hWnd);
+void								DrawBitmapMovie(HDC hdc);
 
 // 전역 변수:
 HINSTANCE hInst;                                // 현재 인스턴스입니다.
@@ -35,6 +37,8 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름�
 
 bitmap bmp;
 HBITMAP hBitmap = NULL;
+movie mv;
+int currentFrameId = 0;
 
 HBITMAP zoomedBitmaps[MAX_ZOOM_LEVEL] = { NULL };
 int currentZoomLevel = (int)(MAX_ZOOM_LEVEL / 2);
@@ -50,7 +54,7 @@ HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 	h.biWidth = width;
 	h.biHeight = height;
 	h.biPlanes = 1;
-	h.biBitCount = bmp.header.bits_per_pixel;
+	h.biBitCount = 24;
 	h.biCompression = BI_RGB;
 
 	HBITMAP hBmp = CreateDIBitmap(hdc, &h, CBM_INIT, data, (BITMAPINFO*)&h, DIB_RGB_COLORS);
@@ -203,6 +207,63 @@ void ReadBitmap(HWND hWnd, const char* path)
 	ReleaseDC(hWnd, hdc);
 }
 
+void LoadBitmapMovie(HWND hWnd, const char* path) {
+	// TODO: 비트맵 무비 로드
+	FILE* fp = fopen(path, "rb");
+	if (fp == NULL) { return; }
+
+	fread(&mv.header, sizeof(movie_header), 1, fp);
+
+	// TODO: 루프 돌면서 프레임 캡처
+	int num_frames = mv.header.total_frame_count;
+	mv.frames = (frame*)malloc(sizeof(frame) * num_frames);
+	if (mv.frames == NULL) { 
+		// TODO: 프레임 배열 할당 실패
+		return; 
+	}
+	memset(mv.frames, 0, sizeof(frame) * num_frames);
+
+	HDC hdc = GetDC(hWnd);
+
+	int idx = 0;
+	while(idx < num_frames) {
+		frame* fr = &mv.frames[idx];
+		fread(&fr->header, sizeof(frame_header), 1, fp);
+
+		int stride = ((fr->header.width * 3 + 3) & ~3);
+		int size = stride * fr->header.height;
+
+		// TODO: 프레임 픽셀 데이터 할당
+		fr->pixel_data = (uint8_t*)malloc(size);
+		if (fr->pixel_data == NULL) {
+			// TODO: 픽셀데이터 할당 실패
+			break;
+		}
+		memset(fr->pixel_data, 0, size);
+
+		fread(fr->pixel_data, size, 1, fp);
+
+		// TODO: 로드한 픽셀로 비트맵 생성
+		fr->bmp = Create24BitHBITMAP(hdc, fr->header.width, fr->header.height, fr->pixel_data);
+
+		idx++;
+	}
+	ReleaseDC(hWnd, hdc);
+
+	if (idx != num_frames) {
+		// TODO: 픽셀데이터 할당 실패 처리
+		while (idx++ < num_frames) {
+			frame* fr = &mv.frames[idx];
+			if (fr != NULL && fr->pixel_data != NULL) {
+				free(fr->pixel_data);
+			}
+		}
+		free(&mv.frames[idx]);
+	}
+
+	fclose(fp);
+}
+
 void DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp)
 {
 	HDC hdcMem = CreateCompatibleDC(hdc);
@@ -212,25 +273,15 @@ void DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp)
 	DeleteDC(hdcMem);
 }
 
-// Windows GDI API 사용
-void DrawScaledBitmap(HDC hdc)
-{
-	double scale = zoomFactors[currentZoomLevel];
-	int newWidth = (int)(bmp.header.width * scale);
-	int newHeight = (int)(bmp.header.height * scale);
+void DrawBitmapMovie(HDC hdc) {
+	// TODO: 무비 프레임 로드 완료됐는지 검사
+	if (mv.frames == NULL) { return; }
 
-	BITMAPINFOHEADER h = { 0 };
-	h.biSize = sizeof(BITMAPINFOHEADER);
-	h.biWidth = bmp.header.width;
-	h.biHeight = bmp.header.height;
-	h.biPlanes = 1;
-	h.biBitCount = bmp.header.bits_per_pixel;
-	h.biCompression = BI_RGB;
+	// TODO: 프레임 로드 완료된 경우, Space바 클릭 시 다음 프레임으로 이동하는 기능
+	frame* fr = &mv.frames[currentFrameId];
+	DrawBitmap(hdc, fr->header.width, fr->header.height, fr->bmp);
 
-	StretchDIBits(hdc,
-		0, 0, newWidth, newHeight,
-		0, 0, bmp.header.width, bmp.header.height,
-		bmp.pixel_data, (BITMAPINFO*)&h, DIB_RGB_COLORS, SRCCOPY);
+	// TODO: 자동으로 다음 프레임을 그리도록 하는 것 추가 바람.
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -324,11 +375,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ClearCachedScaledBitmaps(hdc);
 			ReleaseDC(hWnd, hdc);
 
-			LoadBitmapWindow(hWnd);
+			OpenBitmapSelectWindow(hWnd);
+		}
+		break;
+		case ID_FILE_LOADBITMAPMOVIEFILE:
+		{
+			OpenBitmapMovieSelectWindow(hWnd);
 		}
 		break;
 		case ID_FILE_MOSAIC:
-			MosaicBitmap(hWnd);
+			//MosaicBitmap(hWnd);
 			break;
 		case IDM_ABOUT:
 			break;
@@ -344,21 +400,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		PAINTSTRUCT ps;
 		HDC hdc = BeginPaint(hWnd, &ps);
-		//if (isMosaic) {
-		//	DrawBitmap(hdc, bmp.header.width, bmp.header.height, hMosaicBitmap);
-		//}
-		//else {
-		//	DrawBitmap(hdc, bmp.header.width, bmp.header.height, hBitmap);
-		//}
 
+		// #1 로드한 비트맵 그리기
 		//DrawBitmap(hdc, bmp.header.width, bmp.header.height, hBitmap);
 
-		double scale = zoomFactors[currentZoomLevel];
-		DrawResizedBitmap(hdc, scale);
+		// #2 비트맵 확대/축소
+		//double scale = zoomFactors[currentZoomLevel];
+		//DrawResizedBitmap(hdc, scale);
+
+		// #3 비트맵 무비 그리기
+		DrawBitmapMovie(hdc);
 
 		EndPaint(hWnd, &ps);
 	}
 	break;
+	case WM_KEYDOWN:
+		// TODO: 프레임 로드 완료된 경우, Space바 입력 시 다음 프레임으로 이동하는 기능
+		if (wParam == VK_SPACE)
+		{
+			if (mv.header.total_frame_count != 0) {
+				currentFrameId++;
+				currentFrameId %= mv.header.total_frame_count;
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+		}
+		break;
 	case WM_MOUSEWHEEL:
 		if (GET_WHEEL_DELTA_WPARAM(wParam) > 0)
 		{
@@ -381,7 +447,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-void LoadBitmapWindow(HWND hWnd)
+void OpenBitmapSelectWindow(HWND hWnd)
 {
 	OPENFILENAME ofn;
 	WCHAR szFile[260] = { 0 };
@@ -401,169 +467,44 @@ void LoadBitmapWindow(HWND hWnd)
 
 	if (GetOpenFileName(&ofn) == TRUE)
 	{
-#if 0
-		HANDLE hFile = CreateFileW(szFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-		if (hFile == INVALID_HANDLE_VALUE)
-		{
-			DWORD error = GetLastError();
-			if (error == ERROR_ACCESS_DENIED)
-			{
-				MessageBox(hWnd, L"Access denied to file: %s, Error: %lu \n", hFile, error, L"Error", MB_OK);
-			}
-			else
-			{
-				MessageBox(hWnd, L"Failed to open file: %s, Error: %lu \n", szFile, error, L"Error", MB_OK);
-			}
-
-			CloseHandle(hFile);
-
-			return NULL;
-		}
-		else
-		{
-			//MessageBox(hWnd, L"Read access to file: %s \n", szFile, L"Error", MB_OK);
-			if (ReadBitmap(hFile, bmp) != 0)
-			{
-				MessageBox(hWnd, L"No read access to file: %s \n", szFile, L"Error", MB_OK);
-			}
-			else
-			{
-				// 창 내부 사각영역을 무효화시키는 명령어, 
-				// 만약 사각형이 없으면 전부 무효화하는데 이는 WndProc의 메시지 루프에 WM_PAINT 메시지가 전달되도록 함.
-				InvalidateRect(hWnd, NULL, TRUE);
-			}
-		}
-#else
 		char path[256];
 		int nLen = (int)wcslen(ofn.lpstrFile);
 		wcstombs(path, ofn.lpstrFile, nLen + 1);
 
 		ReadBitmap(hWnd, path);
 		InvalidateRect(hWnd, NULL, TRUE);
-#endif
+	}
+}
+
+void OpenBitmapMovieSelectWindow(HWND hWnd) {
+	OPENFILENAME ofn;
+	WCHAR szFile[260] = { 0 };
+
+	ZeroMemory(&ofn, sizeof(ofn));
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFile = szFile;
+	ofn.lpstrFile[0] = '\0';
+	ofn.nMaxFile = sizeof(szFile);
+	ofn.lpstrFilter = L"BitmapMovie Files\0*.bm\0All Files\0*.*\0";
+	ofn.nFilterIndex = 1;
+	ofn.lpstrFileTitle = NULL;
+	ofn.nMaxFileTitle = 0;
+	ofn.lpstrInitialDir = NULL;
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+	if (GetOpenFileName(&ofn) == TRUE)
+	{
+		char path[256];
+		int nLen = (int)wcslen(ofn.lpstrFile);
+		wcstombs(path, ofn.lpstrFile, nLen + 1);
+
+		LoadBitmapMovie(hWnd, path);
+		InvalidateRect(hWnd, NULL, TRUE);
 	}
 }
 
 // 모자이크 레벨이 높을수록 선명도가 낮아지는 것. 최대 5단계까지
-void MosaicBitmap(HWND hWnd)
-{
-	if (bmp.pixel_data == NULL) return;
+void MosaicBitmap(HWND hWnd) {
 
-	// 토글 모자이크 변수
-	if (isMosaic) {
-		isMosaic = FALSE;
-	}
-	else {
-		isMosaic = TRUE;
-	}
-
-	//if (mosaicLevel <= 0) {
-	//	mosaicLevel = 1;
-	//}
-	//else if (mosaicLevel >= 5) {
-	//	mosaicLevel = 5;
-	//}
-
-	const uint8_t* src = bmp.pixel_data;
-	const int width = bmp.header.width;
-	const int height = bmp.header.height;
-	const int bmpSize = width * height * 3;
-
-	uint8_t* newPixelData = (uint8_t*)malloc(bmpSize);
-	if (newPixelData == NULL) return;
-	memset(newPixelData, 0, bmpSize);
-
-#if 0
-	for (int y = 0; y < height; ++y)
-	{
-		for (int x = 0; x < width; ++x)
-		{
-			// 가까운 픽셀 값을 계산해서 곱하기 적용
-			// 상 - 하 - 좌 - 우 픽셀 값 구하기
-			int index = (y * width + x) * 3;
-
-			// 처음 시도한 것: 오히려 이상한 노이즈처럼 보임
-			// [up down left right] [x y] 
-			// 최소/최대 범위에 벗어나지 않는 인덱스 값 구하기 - 벗어나는 경우 자신의 픽셀 값으로 적용
-			int indice[4][2] = { {0} };
-			if (x <= 0) {
-				indice[0][0] = 0;
-				indice[1][0] = 0;
-				indice[2][0] = 0;
-				indice[3][0] = 0;
-			}
-			else if (x == (width - 1)) {
-				indice[0][0] = width - 1;
-				indice[1][0] = width - 1;
-				indice[2][0] = width - 1;
-				indice[3][0] = width - 1;
-			}
-			else {
-				indice[0][0] = x;
-				indice[1][0] = x;
-				indice[2][0] = x - 1;
-				indice[3][0] = x + 1;
-			}
-
-			if (y == 0) {
-				indice[0][1] = 0;
-				indice[1][1] = 0;
-				indice[2][1] = 0;
-				indice[3][1] = 0;
-			}
-			else if (y == (height - 1)) {
-				indice[0][1] = height - 1;
-				indice[1][1] = height - 1;
-				indice[2][1] = height - 1;
-				indice[3][1] = height - 1;
-			}
-			else {
-				indice[0][1] = y - 1;
-				indice[1][1] = y + 1;
-				indice[2][1] = y;
-				indice[3][1] = y;
-			}
-
-			int up = (indice[0][1] * width + indice[0][0]) * 3;
-			int down = (indice[1][1] * width + indice[1][0]) * 3;
-			int left = (indice[2][1] * width + indice[2][0]) * 3;
-			int right = (indice[3][1] * width + indice[3][0]) * 3;
-
-			newPixelData[index + 0] = (uint8_t)(src[up + 0] * src[down + 0] * src[left + 0] * src[right + 0]);
-			newPixelData[index + 1] = (uint8_t)(src[up + 1] * src[down + 1] * src[left + 1] * src[right + 1]);
-			newPixelData[index + 2] = (uint8_t)(src[up + 2] * src[down + 2] * src[left + 2] * src[right + 2]);
-		}
-	}
-#elif 1
-	// 모자이크에 대한 이해가 필요..
-	// 두번째 시도: 
-	const int n = 2;
-	int* indice = (int*)malloc(n * n);
-	for (int y = 0; y < height; y += n) {
-		for (int x = 0; x < width; x += n) {
-			// 본인 인덱스와 그 주변 (n-1) 영역 만큼 영향을 줌.
-			// 가까운 픽셀 값을 계산해서 곱하기 적용
-			// 상 - 하 - 좌 - 우 픽셀 값 구하기
-			int index = (y * width + x) * 3;
-
-			// 인덱스가 배열을 벗어났다면 나머지 처리
-
-			// 영향을 받는 픽셀 인덱스 구하기
-
-		}
-	}
-	free(indice);
-#elif 2
-
-#endif
-
-	HDC hdc = GetDC(hWnd);
-	hMosaicBitmap = Create24BitHBITMAP(hdc, width, height, newPixelData);
-	ReleaseDC(hWnd, hdc);
-
-	InvalidateRect(hWnd, NULL, TRUE);
-
-	return;
 }
