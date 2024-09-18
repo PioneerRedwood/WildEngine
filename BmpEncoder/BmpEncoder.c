@@ -11,7 +11,7 @@ typedef struct {
 	uint32_t size;
 	uint16_t reserved1, reserved2;
 	uint32_t pixel_start_offset;
-} bitmap_header_info; // 14 bytes
+} bitmap_header_info;
 #pragma pack(pop)
 
 typedef struct {
@@ -99,7 +99,7 @@ int main(int argc, char** argv)
 	}
 
 	// TODO: 출력 파일 포인터 생성
-	FILE* fp = fopen("conv.bm", "wb");
+	FILE* fp = fopen("small.bm", "wb");
 	if (fp == NULL) {
 		printf("파일을 쓰기 형식으로 열 수 없습니다. \n");
 		return 1;
@@ -118,9 +118,10 @@ int main(int argc, char** argv)
 
 	// TODO: 입력받은 파일 수만큼 루프
 	int idx = 0;
-	while (idx++ < num_frames) {
+	while (idx < num_frames) {
+		const char* filepath = argv[idx + 1];
 		bitmap bmp = { 0 };
-		bool result = LoadBitmap(&bmp, argv[idx]);
+		bool result = LoadBitmap(&bmp, filepath);
 
 		// TODO: 로드한 비트맵 정보 옮기기
 		frame* fr = &mv.frames[idx];
@@ -133,14 +134,15 @@ int main(int argc, char** argv)
 			int frame_stride = ((fr->header.width * 3 + 3) & ~3);
 			int num_pixel_bytes = frame_stride * fr->header.height;
 			mv.header.size += (uint16_t)sizeof(frame_header) + num_pixel_bytes;
-			printf("비트맵 로드 성공[ %d / %d ]. 현재 파일: %s - 쌓은 크기: %d \n", idx, num_frames, argv[idx], mv.header.size);
+			printf("비트맵 로드 성공[ %d / %d ]. 현재 파일: %s - 쌓은 크기: %d \n", idx + 1, num_frames, filepath, mv.header.size);
 			
 			mv.header.total_frame_count++;
 		}
 		else {
 			fr->pixel_data = NULL;
-			printf("비트맵 로드에 실패했습니다 %s \n", argv[idx]);
+			printf("비트맵 로드에 실패했습니다 %s \n", filepath);
 		}
+		idx++;
 	}
 
 	// TODO: 파일 헤더 쓰기
@@ -148,7 +150,7 @@ int main(int argc, char** argv)
 	
 	// TODO: 루프 돌면서 프레임 정보 파일에 쓰기
 	idx = 0;
-	while (idx++ < num_frames) {
+	while (idx < num_frames) {
 		frame* fr = &mv.frames[idx];
 		if (fr != NULL && fr->pixel_data) {
 			// TODO: 프레임 헤더 저장
@@ -159,6 +161,7 @@ int main(int argc, char** argv)
 			int num_pixel_bytes = frame_stride * fr->header.height;
 			fwrite(fr->pixel_data, num_pixel_bytes, 1, fp);
 		}
+		idx++;
 	}
 
 	fclose(fp);
