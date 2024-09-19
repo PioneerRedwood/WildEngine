@@ -4,6 +4,7 @@
 #include <memory.h>
 #include <stdbool.h>
 #include <string.h>
+#include "resources.h"
 
 // TODO: 비트맵 로드에 필요한 구조체 선언
 #pragma pack(push, 1)
@@ -94,20 +95,27 @@ bool LoadBitmap(bitmap* bmp, const char* path) {
 /*
 입력 인자 예시
 small.bm - "C:\source\BitmapLoader\BitmapLoader\resources\small_1.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_2.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_3.bmp" "-o" "small.bm"
-dresden-clock.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock04.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock05.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock06.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock07.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock08.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock09.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock10.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-museum-clock\clock11.bmp" "-o" "dresden-clock.bm"
-// TODO: 사이즈가 다른 비트맵 로드할 것 (홀수 짝수)
-// TODO: 사이즈가 엄청 큰 것도 해볼 것 엄청 많은 양의 비트맵도 시도해볼것 (300MB이상)
+
+dresden-clock.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock04.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock05.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock06.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock07.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock08.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock09.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock10.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock11.bmp" "-o" "dresden-clock.bm"
+
+// 사이즈가 다양한 비트맵
+random.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\CBR.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\Redwood.bmp" "-o" "random.bm"
+
+// 사이즈가 큰 것, 많은 양의 비트맵도 시도해볼것 (300MB이상)
+// resources.h 참고
+
 */
 
 int main(int argc, char** argv)
 {
-	// TODO: 입력 인자 갯수 확인
+#if 0
+	// 입력 인자 갯수 확인
 	if (argc < 2) {
 		printf("잘못된 사용: 최소 한개의 비트맵 파일 경로를 입력하시오. 입력된 인자수 : %d \n", argc);
 		return 1;
 	}
 
-	// TODO: 입력 인자 중에서 출력 파일이 지정되지 않은 경우 종료
+	// 입력 인자 중에서 출력 파일이 지정되지 않은 경우 종료
 	// -o 이후의 바로 다음의 입력 문자열은 파일 경로이며, 그 이후의 인자는 무시됨.
 	const char* outfile = NULL;
 	int num_frames = 0;
@@ -118,20 +126,25 @@ int main(int argc, char** argv)
 			break;
 		}
 	}
+#else
+	const char* outfile = "castle-1.bm";
+	int num_frames = 120;
+	argv = img_urls;
+#endif
 
 	if (outfile == NULL) {
 		printf("잘못된 입력: -o 인자 뒤에 출력할 파일 경로를 입력하십시오. \n");
 		return 1;
 	}
 
-	// TODO: 출력 파일 포인터 생성
+	// 출력 파일 포인터 생성
 	FILE* fp = fopen(outfile, "wb");
 	if (fp == NULL) {
 		printf("파일을 쓰기 형식으로 열 수 없습니다. \n");
 		return 1;
 	}
 
-	// TODO: 비트맵 정보 저장할 프레임 배열 생성
+	// 비트맵 정보 저장할 프레임 배열 생성
 	movie mv = { 0 };
 	mv.frames = (frame*)malloc(num_frames * sizeof(frame));
 	if (mv.frames == NULL) { return 1; }
@@ -139,23 +152,23 @@ int main(int argc, char** argv)
 
 	// 파일 크기, 프레임 수, 초 당 프레임
 	mv.header.size += sizeof(uint32_t) * 3;
-	mv.header.fps = 3;
+	mv.header.fps = 30;
 
-	// TODO: 입력받은 파일 수만큼 루프
+	// 입력받은 파일 수만큼 루프
 	int idx = 0;
 	while (idx < num_frames) {
 		const char* filepath = argv[idx + 1];
 		bitmap bmp = { 0 };
 		bool result = LoadBitmap(&bmp, filepath);
 
-		// TODO: 로드한 비트맵 정보 옮기기
+		// 로드한 비트맵 정보 옮기기
 		frame* fr = &mv.frames[idx];
 		if (result) {
 			fr->header.width = bmp.header.width;
 			fr->header.height = bmp.header.height;
 			fr->pixel_data = bmp.pixel_data;
 
-			// TODD: 성공적으로 로드한 비트맵이라면 movie 파일 업데이트
+			// 성공적으로 로드한 비트맵이라면 mv 업데이트
 			int frame_stride = ((fr->header.width * 3 + 3) & ~3);
 			int num_pixel_bytes = frame_stride * fr->header.height;
 			mv.header.size += (uint16_t)sizeof(frame_header) + num_pixel_bytes;
@@ -170,25 +183,29 @@ int main(int argc, char** argv)
 		idx++;
 	}
 
-	// TODO: 파일 헤더 쓰기
+	// 파일 헤더 쓰기
 	fwrite(&mv.header, sizeof(movie_header), 1, fp);
 	
-	// TODO: 루프 돌면서 프레임 정보 파일에 쓰기
+	// 루프 돌면서 프레임 정보 파일에 쓰기
+	// TODO: 파일 읽기 및 쓰기를 최소화하기
+#if 0
+
+#else
 	idx = 0;
 	while (idx < num_frames) {
 		frame* fr = &mv.frames[idx];
 		if (fr != NULL && fr->pixel_data) {
-			// TODO: 프레임 헤더 저장
+			// 프레임 헤더 저장
 			fwrite(&fr->header, sizeof(frame_header), 1, fp);
 
-			// TODO: 프레임 바디 저장
+			// 프레임 바디 저장
 			int frame_stride = ((fr->header.width * 3 + 3) & ~3);
 			int num_pixel_bytes = frame_stride * fr->header.height;
 			fwrite(fr->pixel_data, num_pixel_bytes, 1, fp);
 		}
 		idx++;
 	}
-
+#endif
 	fclose(fp);
 
 	return 0;

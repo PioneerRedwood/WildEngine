@@ -432,3 +432,7 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Test Big Resources
+BitmapLoader/resources/test/*
+BmpEncoder/bms/*

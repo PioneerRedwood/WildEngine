@@ -11,6 +11,7 @@
 
 #define MAX_LOADSTRING 100
 #define MAX_ZOOM_LEVEL 16
+#define TIMER_ID			 1
 
 #define USE_BILINEAR_INTERPOLATION true
 
@@ -208,13 +209,22 @@ void ReadBitmap(HWND hWnd, const char* path)
 }
 
 void LoadBitmapMovie(HWND hWnd, const char* path) {
-	// TODO: 비트맵 무비 로드
 	FILE* fp = fopen(path, "rb");
 	if (fp == NULL) { return; }
 
 	fread(&mv.header, sizeof(movie_header), 1, fp);
 
-	// TODO: 루프 돌면서 프레임 캡처
+	// 루프 돌면서 프레임 캡처
+#if 0
+	// TODO: 루프가 아닌 파일 읽기 한번으로 모든 프레임 데이터를 읽는 방법을 생각해보자
+	// 한번에 읽으려면.. 크기는 크기대로 읽고 - 픽셀은 픽셀대로 읽고
+	// 1) 크기 읽기: [(w1, h1), (w2, h2), ... (wn, hn)] (4 + 4) * n bytes
+	// 2) 데이터 읽기: (total_frame_size - (8 * n)) bytes
+	int total_frame_size = mv.header.size - sizeof(movie_header);
+	int num_frames = mv.header.total_frame_count;
+	mv.frames = (frame*)malloc(sizeof(frame) * num_frames);
+
+#else
 	int num_frames = mv.header.total_frame_count;
 	mv.frames = (frame*)malloc(sizeof(frame) * num_frames);
 	if (mv.frames == NULL) { 
@@ -233,7 +243,7 @@ void LoadBitmapMovie(HWND hWnd, const char* path) {
 		int stride = ((fr->header.width * 3 + 3) & ~3);
 		int size = stride * fr->header.height;
 
-		// TODO: 프레임 픽셀 데이터 할당
+		// 프레임 픽셀 데이터 할당
 		fr->pixel_data = (uint8_t*)malloc(size);
 		if (fr->pixel_data == NULL) {
 			// TODO: 픽셀데이터 할당 실패
@@ -243,15 +253,16 @@ void LoadBitmapMovie(HWND hWnd, const char* path) {
 
 		fread(fr->pixel_data, size, 1, fp);
 
-		// TODO: 로드한 픽셀로 비트맵 생성
+		// 로드한 픽셀로 비트맵 생성
 		fr->bmp = Create24BitHBITMAP(hdc, fr->header.width, fr->header.height, fr->pixel_data);
 
 		idx++;
 	}
 	ReleaseDC(hWnd, hdc);
+#endif
 
 	if (idx != num_frames) {
-		// TODO: 픽셀데이터 할당 실패 처리
+		// 픽셀데이터 할당 실패 처리
 		while (idx++ < num_frames) {
 			frame* fr = &mv.frames[idx];
 			if (fr != NULL && fr->pixel_data != NULL) {
@@ -277,11 +288,23 @@ void DrawBitmapMovie(HDC hdc) {
 	// TODO: 무비 프레임 로드 완료됐는지 검사
 	if (mv.frames == NULL) { return; }
 
-	// TODO: 프레임 로드 완료된 경우, Space바 클릭 시 다음 프레임으로 이동하는 기능
+	// TODO: 깜빡거리는 현상 수정 바람
+#if 1
+	frame* fr = &mv.frames[currentFrameId];
+
+	HDC memDC = CreateCompatibleDC(hdc);
+
+	HBITMAP hCurBmp = fr->bmp;
+	HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, hCurBmp);
+
+	BitBlt(hdc, 0, 0, fr->header.width, fr->header.height, memDC, 0, 0, SRCCOPY);
+
+	SelectObject(memDC, oldBitmap);
+	DeleteDC(memDC);
+#else
 	frame* fr = &mv.frames[currentFrameId];
 	DrawBitmap(hdc, fr->header.width, fr->header.height, fr->bmp);
-
-	// TODO: 자동으로 다음 프레임을 그리도록 하는 것 추가 바람.
+#endif
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -381,6 +404,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case ID_FILE_LOADBITMAPMOVIEFILE:
 		{
 			OpenBitmapMovieSelectWindow(hWnd);
+
+			if (mv.header.total_frame_count != 0) {
+				// TODO: 타이머 설정 밀리초
+				SetTimer(hWnd, TIMER_ID, (int)(1000 / mv.header.fps), NULL);
+			}
 		}
 		break;
 		case ID_FILE_MOSAIC:
@@ -438,7 +466,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		InvalidateRect(hWnd, NULL, TRUE);
 		break;
+	case WM_TIMER:
+		// 타이머 설정 - 
+		// TODO: 깜빡거리는 현상 존재
+		if (wParam == TIMER_ID)
+		{
+			if (mv.header.total_frame_count != 0) {
+				currentFrameId++;
+				currentFrameId %= mv.header.total_frame_count;
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+		}
+		break;
+	// TODO: 해당 방식 말고, 다른 방법으로 깜빡거리는 현상 수정 바람
+	case WM_ERASEBKGND:
+		return 1;  // 배경 지우기 방지
 	case WM_DESTROY:
+		KillTimer(hWnd, TIMER_ID);
 		PostQuitMessage(0);
 		break;
 	default:

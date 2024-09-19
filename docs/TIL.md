@@ -58,3 +58,8 @@ Platform 별 Texture Compression
 ```shell
 ffmpeg -i .\Dresden.mp4 -r 2 -vf scale=iw/2:ih/2 -pix_fmt bgr24 .\dresden-museum-clock\clock%02d.bmp
 ```
+
+입력 영상의 0초 구간부터 10초 동안 초당 12프레임으로 스케일은 절반으로 줄인 BGR24 픽셀 포맷 비트맵 추출
+```shell
+ffmpeg -ss 00:00:00 -i .\castle_on_the_hill.MOV -t 10 -r 12 -vf scale=iw/2:ih/2 -pix_fmt bgr24 .\castle\%00003d.bmp
+```
