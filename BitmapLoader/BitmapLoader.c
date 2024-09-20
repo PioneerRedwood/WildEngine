@@ -285,7 +285,7 @@ void DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp)
 }
 
 void DrawBitmapMovie(HDC hdc) {
-	// TODO: 무비 프레임 로드 완료됐는지 검사
+	// 무비 프레임 로드 완료됐는지 검사
 	if (mv.frames == NULL) { return; }
 
 	// TODO: 깜빡거리는 현상 수정 바람
@@ -479,8 +479,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	// TODO: 해당 방식 말고, 다른 방법으로 깜빡거리는 현상 수정 바람
-	case WM_ERASEBKGND:
-		return 1;  // 배경 지우기 방지
+	//case WM_ERASEBKGND:
+	//	return 1;  // 배경 지우기 방지
 	case WM_DESTROY:
 		KillTimer(hWnd, TIMER_ID);
 		PostQuitMessage(0);
