@@ -434,5 +434,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 # Test Big Resources
-BitmapLoader/resources/test/*
+resources/test/*
 BmpEncoder/bms/*
+

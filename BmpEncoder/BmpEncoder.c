@@ -4,9 +4,8 @@
 #include <memory.h>
 #include <stdbool.h>
 #include <string.h>
-#include "resources.h"
 
-// TODO: 비트맵 로드에 필요한 구조체 선언
+// 비트맵 로드에 필요한 구조체 선언
 #pragma pack(push, 1)
 typedef struct {
 	char header_field[2];
@@ -94,29 +93,41 @@ bool LoadBitmap(bitmap* bmp, const char* path) {
 
 /*
 입력 인자 예시
-small.bm - "C:\source\BitmapLoader\BitmapLoader\resources\small_1.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_2.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\small_3.bmp" "-o" "small.bm"
+small.bm - 
 
-dresden-clock.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock04.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock05.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock06.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock07.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock08.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock09.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock10.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock11.bmp" "-o" "dresden-clock.bm"
+dresden-clock.bm 
+- PREFIX: "../resources/dresden/"
+- OUTFILE: "bms/dresden.bm"
+- NUM_FRAMES 11
+- FPS 11
 
 // 사이즈가 다양한 비트맵
-random.bm - "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock01.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock02.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\dresden-clock\clock03.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\CBR.bmp" "C:\source\BitmapLoader\BitmapLoader\resources\Redwood.bmp" "-o" "random.bm"
+random.bm
+- PREFIX: "../resources/random/"
+- OUTPUT: "bms/random.bm"
+- NUM_FRMES 5
+- FPS 5
 
-// 사이즈가 큰 것, 많은 양의 비트맵도 시도해볼것 (300MB이상)
-// LOAD_HUGE_FILES true로 하면 355MB bm 파일 생성됨
+// 사이즈가 큰 것, 많은 양의 비트맵도 시도해볼것
+castle3.bm
+- PREFIX: "../resources/test/castle3/"
+- OUTPUT: "bms/castle3.bm"
+- NUM_FRAMES 5400
+- FPS 30
 
 */
 
 #define BUF_SIZE 255
-#define BMP_PREFIX "C:/source/BitmapLoader/BitmapLoader/resources/test/castle-2/"
-#define OUTFILE "castle2.bm"
-#define NUM_FRAMES 240
-#define FPS 24
+#define BMP_PREFIX "../resources/test/castle4/"
+#define OUTFILE "bms/castle4.bm"
+#define NUM_FRAMES 5400
+#define FPS 60
 #define LOAD_HUGE_FILES true
 
 char** file_names = NULL;
 
 bool LoadFileNames() {
-	const int num_files = 240;
+	const int num_files = NUM_FRAMES;
 	file_names = (char**)malloc(num_files * sizeof(char*));
 	if (file_names == NULL) {
 		printf("파일 이름을 담기 위한 배열 할당 실패\n");
@@ -124,12 +135,11 @@ bool LoadFileNames() {
 	}
 	memset(file_names, 0, num_files * sizeof(char*));
 
-	const char* prefix = BMP_PREFIX;
 	char buf[BUF_SIZE];
 
 	for (int i = 0; i < num_files; ++i) {
 		memset(buf, 0, BUF_SIZE);
-		snprintf(buf, BUF_SIZE, "%s%d.bmp", prefix, i + 1);
+		snprintf(buf, BUF_SIZE, "%s%d.bmp", BMP_PREFIX, i + 1);
 
 		file_names[i] = (char*)malloc(BUF_SIZE + 1);
 		if (file_names[i] == NULL) {
@@ -153,36 +163,11 @@ bool LoadFileNames() {
 
 int main(int argc, char** argv)
 {
-#if LOAD_HUGE_FILES
 	const char* outfile = OUTFILE;
 	int num_frames = NUM_FRAMES;
 	if (!LoadFileNames()) {
 		return 1;
 	}	
-#else
-	// 입력 인자 갯수 확인
-	if (argc < 2) {
-		printf("잘못된 사용: 최소 한개의 비트맵 파일 경로를 입력하시오. 입력된 인자수 : %d \n", argc);
-		return 1;
-	}
-
-	// 입력 인자 중에서 출력 파일이 지정되지 않은 경우 종료
-	// -o 이후의 바로 다음의 입력 문자열은 파일 경로이며, 그 이후의 인자는 무시됨.
-	const char* outfile = NULL;
-	int num_frames = 0;
-	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "-o") == 0 && ((i + 1) < argc)) {
-			outfile = argv[i + 1];
-			num_frames = i - 1;
-			break;
-		}
-	}
-#endif
-
-	if (outfile == NULL) {
-		printf("잘못된 입력: -o 인자 뒤에 출력할 파일 경로를 입력하십시오. \n");
-		return 1;
-	}
 
 	// 출력 파일 포인터 생성
 	FILE* fp = fopen(outfile, "wb");
@@ -201,14 +186,9 @@ int main(int argc, char** argv)
 	mv.header.size += sizeof(uint32_t) * 3;
 	mv.header.fps = FPS;
 
-	// 입력받은 파일 수만큼 루프
 	int idx = 0;
 	while (idx < num_frames) {
-#if LOAD_HUGE_FILES
 		const char* filepath = file_names[idx];
-#else
-		const char* filepath = argv[idx + 1];
-#endif 
 		bitmap bmp = { 0 };
 		bool result = LoadBitmap(&bmp, filepath);
 
@@ -219,7 +199,7 @@ int main(int argc, char** argv)
 			fr->header.height = bmp.header.height;
 			fr->pixel_data = bmp.pixel_data;
 
-			// 성공적으로 로드한 비트맵이라면 mv 업데이트
+			// 성공 시 데이터 업데이트
 			int frame_stride = ((fr->header.width * 3 + 3) & ~3);
 			int num_pixel_bytes = frame_stride * fr->header.height;
 			mv.header.size += (uint16_t)sizeof(frame_header) + num_pixel_bytes;
@@ -238,10 +218,6 @@ int main(int argc, char** argv)
 	fwrite(&mv.header, sizeof(movie_header), 1, fp);
 
 	// 루프 돌면서 프레임 정보 파일에 쓰기
-	// TODO: 파일 읽기 및 쓰기를 최소화하기
-#if 0
-
-#else
 	idx = 0;
 	while (idx < num_frames) {
 		frame* fr = &mv.frames[idx];
@@ -256,11 +232,8 @@ int main(int argc, char** argv)
 		}
 		idx++;
 	}
-#endif
 	fclose(fp);
 
-
-#if LOAD_HUGE_FILES
 	// TODO: 할당한 파일 이름 메모리 해제
 	for (int i = 0; i < num_frames; ++i) {
 		if (file_names[i] != NULL) {
@@ -270,8 +243,6 @@ int main(int argc, char** argv)
 	}
 	free(file_names);
 	file_names = NULL;
-	
-#endif
 
 	return 0;
 }

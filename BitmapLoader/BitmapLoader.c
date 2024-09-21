@@ -382,6 +382,50 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	return TRUE;
 }
 
+HANDLE hTimer = NULL;       // 타이머 핸들
+HANDLE hTimerQueue = NULL;  // 타이머 큐 핸들
+
+VOID CALLBACK DrawBmpMovieCallback(HWND hWnd, UINT message, UINT_PTR idTimer, DWORD dwTime) {
+	if (mv.header.total_frame_count != 0) {
+		int prev_frame_id = currentFrameId;
+		currentFrameId = (++currentFrameId % mv.header.total_frame_count);
+
+		// TODO: 만약 다음 프레임이 현재 프레임과 다른 크기이면 bErase TRUE 설정
+		frame* prev_fr = &mv.frames[prev_frame_id];
+		frame* curr_fr = &mv.frames[currentFrameId];
+
+		if (prev_fr->header.width != curr_fr->header.width
+			|| prev_fr->header.height != curr_fr->header.height) {
+			//RECT rect = { .left = 0, };
+			InvalidateRect(hWnd, NULL, TRUE);
+		}
+		else {
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+	}
+}
+
+VOID CALLBACK UpdateFrameCallback(PVOID lpParam, BOOLEAN TimerOrWaitFired) {
+	HWND hWnd = (HWND)lpParam;
+	if (mv.header.total_frame_count != 0) {
+		int prev_frame_id = currentFrameId;
+		currentFrameId = (++currentFrameId % mv.header.total_frame_count);
+
+		// TODO: 만약 다음 프레임이 현재 프레임과 다른 크기이면 bErase TRUE 설정
+		frame* prev_fr = &mv.frames[prev_frame_id];
+		frame* curr_fr = &mv.frames[currentFrameId];
+
+		if (prev_fr->header.width != curr_fr->header.width
+			|| prev_fr->header.height != curr_fr->header.height) {
+			//RECT rect = { .left = 0, };
+			InvalidateRect(hWnd, NULL, TRUE);
+		}
+		else {
+			InvalidateRect(hWnd, NULL, FALSE);
+		}
+	}
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
@@ -405,9 +449,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			OpenBitmapMovieSelectWindow(hWnd);
 
+			// 새로운 스레드 큐 생성
+			//if (hTimerQueue == NULL) {
+			//	// 타이머 큐를 생성
+			//	hTimerQueue = CreateTimerQueue();
+			//	if (NULL == hTimerQueue) {
+			//		return 1;
+			//	}
+			//	int interval = (int)(1000 / mv.header.fps);
+			//	// 타이머를 타이머 큐에 추가 (33ms마다 콜백 호출)
+			//	if (!CreateTimerQueueTimer(&hTimer, hTimerQueue,
+			//		(WAITORTIMERCALLBACK)UpdateFrameCallback,
+			//		hWnd, 0, interval, 0)) {
+			//		return 1;
+			//	}
+			//}
+
 			if (mv.header.total_frame_count != 0) {
 				// TODO: 타이머 설정 밀리초
-				SetTimer(hWnd, TIMER_ID, (int)(1000 / mv.header.fps), NULL);
+				int interval = (int)(1000 / mv.header.fps);
+				SetTimer(hWnd, TIMER_ID, interval, (TIMERPROC)DrawBmpMovieCallback);
 			}
 		}
 		break;
@@ -465,18 +526,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (currentZoomLevel > 0) currentZoomLevel--;
 		}
 		InvalidateRect(hWnd, NULL, TRUE);
-		break;
-	case WM_TIMER:
-		// 타이머 설정 - 
-		// TODO: 깜빡거리는 현상 존재
-		if (wParam == TIMER_ID)
-		{
-			if (mv.header.total_frame_count != 0) {
-				currentFrameId++;
-				currentFrameId %= mv.header.total_frame_count;
-				InvalidateRect(hWnd, NULL, TRUE);
-			}
-		}
 		break;
 	// TODO: 해당 방식 말고, 다른 방법으로 깜빡거리는 현상 수정 바람
 	//case WM_ERASEBKGND:
