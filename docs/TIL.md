@@ -63,3 +63,15 @@ ffmpeg -i .\Dresden.mp4 -r 2 -vf scale=iw/2:ih/2 -pix_fmt bgr24 .\dresden-museum
 ```shell
 ffmpeg -ss 00:00:00 -i .\castle_on_the_hill.MOV -t 10 -r 12 -vf scale=iw/2:ih/2 -pix_fmt bgr24 .\castle\%d.bmp
 ```
+
+## 시간 베이스로 접근
+- 프레임 단위로 렌더링하는 비트맵 무비 작업 시 `SetTimer`의 해상도 한계를 경험
+- 해상도의 한계 뿐 아니라, 프레임을 스킵해야하는 경우 등 여러 상황을 위해서는 시간 베이스 접근이 반드시 요구됨
+- 예를 들어, 이동 및 충돌 등의 사건 역시 절대 변하지 않는 시간을 베이스로 계산해야 쉽고 정확
+- Windows 환경에서 주로 사용되는 타이머는 정확한 타이머인 `QueryPerformanceCounter` 사용
+
+## SDL 스트리밍
+- SDL로 비트맵 무비를 스트리밍하는 기능을 완성
+- SDL 윈도우 생성, 그래픽 그리기 등 기초부터 시작
+- 멀티 스레드; 비트맵을 스트리밍하기 위해서는 읽고 사용하는 스레드가 달라야 함
+  - beginThread, Critical Section 사용
