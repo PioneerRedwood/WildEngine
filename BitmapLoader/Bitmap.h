@@ -560,15 +560,19 @@ typedef struct {
 
 //////////////////////////////////////////////////////////////////////
 
+#pragma pack(push, 1)
 typedef struct {
+  uint64_t pixel_data_offset;
+  uint32_t index;
   uint32_t width;
   uint32_t height;
 } frame_header;
+#pragma pack(pop)
 
 typedef struct {
-  uint32_t size;
-  uint16_t total_frame_count;
-  uint16_t fps;
+  uint64_t size;
+  uint32_t total_frame_count;
+  uint32_t fps;
 } movie_header;
 
 typedef struct {

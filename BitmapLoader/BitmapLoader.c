@@ -36,10 +36,12 @@ HINSTANCE hInst;                                // 현재 인스턴스입니다.
 WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입니다.
 WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름입니다.
 
-bitmap bmp;
+bitmap bmp = {0};
 HBITMAP hBitmap = NULL;
-movie mv;
-int currentFrameId = 0;
+
+movie mv = {0};
+FILE* mv_fp = NULL;
+int current_frame_id = 0;
 
 HBITMAP zoomedBitmaps[MAX_ZOOM_LEVEL] = { NULL };
 int currentZoomLevel = (int)(MAX_ZOOM_LEVEL / 2);
@@ -47,6 +49,10 @@ double zoomFactors[MAX_ZOOM_LEVEL] = { 0.01, 0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1.
 
 HBITMAP hMosaicBitmap = NULL;
 BOOL isMosaic = FALSE;
+
+DWORD mvStartTime = 0;
+#define MAX_PRELOAD 128;
+int num_preload = MAX_PRELOAD;
 
 HBITMAP Create24BitHBITMAP(HDC hdc, int width, int height, uint8_t* data)
 {
@@ -208,71 +214,125 @@ void ReadBitmap(HWND hWnd, const char* path)
 	ReleaseDC(hWnd, hdc);
 }
 
-void LoadBitmapMovie(HWND hWnd, const char* path) {
-	FILE* fp = fopen(path, "rb");
-	if (fp == NULL) { return; }
+// 스트리밍으로 바꾸기
+void ReadBmpMovieWithRange(HWND hWnd, int from, int to) {
+	if (from > to) { int temp = from; from = to; to = temp; }
 
-	fread(&mv.header, sizeof(movie_header), 1, fp);
-
-	// 루프 돌면서 프레임 캡처
-#if 0
-	// TODO: 루프가 아닌 파일 읽기 한번으로 모든 프레임 데이터를 읽는 방법을 생각해보자
-	// 한번에 읽으려면.. 크기는 크기대로 읽고 - 픽셀은 픽셀대로 읽고
-	// 1) 크기 읽기: [(w1, h1), (w2, h2), ... (wn, hn)] (4 + 4) * n bytes
-	// 2) 데이터 읽기: (total_frame_size - (8 * n)) bytes
-	int total_frame_size = mv.header.size - sizeof(movie_header);
-	int num_frames = mv.header.total_frame_count;
-	mv.frames = (frame*)malloc(sizeof(frame) * num_frames);
-
-#else
-	int num_frames = mv.header.total_frame_count;
-	mv.frames = (frame*)malloc(sizeof(frame) * num_frames);
-	if (mv.frames == NULL) { 
-		// TODO: 프레임 배열 할당 실패
-		return; 
+	if (abs(to - from) > num_preload) {
+		to = from + num_preload;
 	}
-	memset(mv.frames, 0, sizeof(frame) * num_frames);
 
 	HDC hdc = GetDC(hWnd);
+	for (int idx = from; idx < to; ++idx) {
+		if (idx >= mv.header.total_frame_count) { break; }
 
-	int idx = 0;
-	while(idx < num_frames) {
 		frame* fr = &mv.frames[idx];
-		fread(&fr->header, sizeof(frame_header), 1, fp);
+		fseek(mv_fp, fr->header.pixel_data_offset, SEEK_SET);
+		//fread(&fr->header, sizeof(frame_header), 1, mv_fp);
 
 		int stride = ((fr->header.width * 3 + 3) & ~3);
 		int size = stride * fr->header.height;
 
 		// 프레임 픽셀 데이터 할당
 		fr->pixel_data = (uint8_t*)malloc(size);
-		if (fr->pixel_data == NULL) {
-			// TODO: 픽셀데이터 할당 실패
-			break;
-		}
+		if (fr->pixel_data == NULL) { break; }
 		memset(fr->pixel_data, 0, size);
 
-		fread(fr->pixel_data, size, 1, fp);
+		fread(fr->pixel_data, size, 1, mv_fp);
 
 		// 로드한 픽셀로 비트맵 생성
 		fr->bmp = Create24BitHBITMAP(hdc, fr->header.width, fr->header.height, fr->pixel_data);
+	}
+	ReleaseDC(hWnd, hdc);
+}
 
+void LoadBitmapMovie(HWND hWnd, const char* path) {
+	num_preload = MAX_PRELOAD;
+
+	mv_fp = fopen(path, "rb");
+	if (mv_fp == NULL) { return; }
+
+	// 저장된 데이터는 끝부분에 헤더가 위치해 있으므로, 먼저 끝부분을 읽기
+	const long header_start_offset = (-1) * sizeof(movie_header);
+	fseek(mv_fp, header_start_offset, SEEK_END);
+	fread(&mv.header, sizeof(movie_header), 1, mv_fp);
+	fseek(mv_fp, 0, SEEK_SET);
+
+	mv.frames = (frame*)malloc(sizeof(frame) * mv.header.total_frame_count);
+	if (mv.frames == NULL) { return; }
+	memset(mv.frames, 0, sizeof(frame) * mv.header.total_frame_count);
+
+#if 1
+	// 스트리밍 지원하도록
+
+	int idx = 0;
+	// 1st 읽기 - 프레임 정보 (크기, 오프셋)
+	while (idx < mv.header.total_frame_count) {
+		frame* fr = &mv.frames[idx];
+		fread(&fr->header, sizeof(frame_header), 1, mv_fp);
+		
+		if ((idx + 1) < mv.header.total_frame_count) {
+			int stride = ((fr->header.width * 3 + 3) & ~3);
+			int size = stride * fr->header.height;
+			fseek(mv_fp, size, SEEK_CUR);
+		}
 		idx++;
+	}
+
+	if (num_preload > mv.header.total_frame_count) { 
+		num_preload = mv.header.total_frame_count;
+	}
+	else {
+		num_preload = MAX_PRELOAD;
+	}
+
+	HDC hdc = GetDC(hWnd);
+
+	// 2nd 프레임 픽셀 데이터 사전읽기
+	for(idx = 0; idx < num_preload; ++idx) {
+		if (idx >= mv.header.total_frame_count) { break; }
+
+		frame* fr = &mv.frames[idx];
+		fseek(mv_fp, fr->header.pixel_data_offset, SEEK_SET);
+		//fread(&fr->header, sizeof(frame_header), 1, mv_fp);
+
+		int stride = ((fr->header.width * 3 + 3) & ~3);
+		int size = stride * fr->header.height;
+
+		// 프레임 픽셀 데이터 할당
+		fr->pixel_data = (uint8_t*)malloc(size);
+		if (fr->pixel_data == NULL) { break; }
+		memset(fr->pixel_data, 0, size);
+
+		fread(fr->pixel_data, size, 1, mv_fp);
+
+		// 로드한 픽셀로 비트맵 생성
+		fr->bmp = Create24BitHBITMAP(hdc, fr->header.width, fr->header.height, fr->pixel_data);
+	}
+	ReleaseDC(hWnd, hdc);
+#else
+	// 파일이 큰 경우 오래 걸림 - 메모리에 다 올리는 방식
+	HDC hdc = GetDC(hWnd);
+
+	for (int i = 0; i < mv.header.total_frame_count; ++i) {
+		frame* fr = &mv.frames[i];
+		fread(&fr->header, sizeof(frame_header), 1, mv_fp);
+
+		int stride = ((fr->header.width * 3 + 3) & ~3);
+		int size = stride * fr->header.height;
+
+		// 프레임 픽셀 데이터 할당
+		fr->pixel_data = (uint8_t*)malloc(size);
+		if (fr->pixel_data == NULL) break;
+		memset(fr->pixel_data, 0, size);
+
+		fread(fr->pixel_data, size, 1, mv_fp);
+
+		// 로드한 픽셀로 비트맵 생성
+		fr->bmp = Create24BitHBITMAP(hdc, fr->header.width, fr->header.height, fr->pixel_data);
 	}
 	ReleaseDC(hWnd, hdc);
 #endif
-
-	if (idx != num_frames) {
-		// 픽셀데이터 할당 실패 처리
-		while (idx++ < num_frames) {
-			frame* fr = &mv.frames[idx];
-			if (fr != NULL && fr->pixel_data != NULL) {
-				free(fr->pixel_data);
-			}
-		}
-		free(&mv.frames[idx]);
-	}
-
-	fclose(fp);
 }
 
 void DrawBitmap(HDC hdc, int width, int height, HBITMAP hBmp)
@@ -288,23 +348,8 @@ void DrawBitmapMovie(HDC hdc) {
 	// 무비 프레임 로드 완료됐는지 검사
 	if (mv.frames == NULL) { return; }
 
-	// TODO: 깜빡거리는 현상 수정 바람
-#if 1
-	frame* fr = &mv.frames[currentFrameId];
-
-	HDC memDC = CreateCompatibleDC(hdc);
-
-	HBITMAP hCurBmp = fr->bmp;
-	HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, hCurBmp);
-
-	BitBlt(hdc, 0, 0, fr->header.width, fr->header.height, memDC, 0, 0, SRCCOPY);
-
-	SelectObject(memDC, oldBitmap);
-	DeleteDC(memDC);
-#else
-	frame* fr = &mv.frames[currentFrameId];
+	frame* fr = &mv.frames[current_frame_id];
 	DrawBitmap(hdc, fr->header.width, fr->header.height, fr->bmp);
-#endif
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -382,48 +427,43 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	return TRUE;
 }
 
-HANDLE hTimer = NULL;       // 타이머 핸들
-HANDLE hTimerQueue = NULL;  // 타이머 큐 핸들
+VOID CALLBACK DrawBmpMovieCallback(HWND hWnd, UINT message, UINT_PTR idTimer, DWORD dwTime) {	
+	// 타이머 시작 이후로 경과 시간
+	DWORD elapsed = timeGetTime() - mvStartTime;
 
-VOID CALLBACK DrawBmpMovieCallback(HWND hWnd, UINT message, UINT_PTR idTimer, DWORD dwTime) {
-	if (mv.header.total_frame_count != 0) {
-		int prev_frame_id = currentFrameId;
-		currentFrameId = (++currentFrameId % mv.header.total_frame_count);
+	// 몇번째 프레임을 보여줘야 하는지 계산 
+	const float index_unit = (float)mv.header.fps / 1000;
+	
+	int prev_frame_id = current_frame_id;
+	current_frame_id = (int)(elapsed * index_unit);
+	current_frame_id %= mv.header.total_frame_count;
 
-		// TODO: 만약 다음 프레임이 현재 프레임과 다른 크기이면 bErase TRUE 설정
-		frame* prev_fr = &mv.frames[prev_frame_id];
-		frame* curr_fr = &mv.frames[currentFrameId];
-
-		if (prev_fr->header.width != curr_fr->header.width
-			|| prev_fr->header.height != curr_fr->header.height) {
-			//RECT rect = { .left = 0, };
-			InvalidateRect(hWnd, NULL, TRUE);
-		}
-		else {
-			InvalidateRect(hWnd, NULL, FALSE);
-		}
+	// 해당 프레임이 로드되지 않았다면 사전 로드 크기만큼 로드
+	frame* fr = &mv.frames[current_frame_id];
+	if (fr->pixel_data == NULL) {
+		ReadBmpMovieWithRange(hWnd, current_frame_id, current_frame_id + num_preload);
 	}
-}
 
-VOID CALLBACK UpdateFrameCallback(PVOID lpParam, BOOLEAN TimerOrWaitFired) {
-	HWND hWnd = (HWND)lpParam;
-	if (mv.header.total_frame_count != 0) {
-		int prev_frame_id = currentFrameId;
-		currentFrameId = (++currentFrameId % mv.header.total_frame_count);
+	InvalidateRect(hWnd, NULL, FALSE);
 
-		// TODO: 만약 다음 프레임이 현재 프레임과 다른 크기이면 bErase TRUE 설정
-		frame* prev_fr = &mv.frames[prev_frame_id];
-		frame* curr_fr = &mv.frames[currentFrameId];
+#if 0
+	// 크기가 다른 프레임이 담겨있는 경우 처리
+	int prev_frame_id = currentFrameId;
+	currentFrameId = (++currentFrameId % mv.header.total_frame_count);
 
-		if (prev_fr->header.width != curr_fr->header.width
-			|| prev_fr->header.height != curr_fr->header.height) {
-			//RECT rect = { .left = 0, };
-			InvalidateRect(hWnd, NULL, TRUE);
-		}
-		else {
-			InvalidateRect(hWnd, NULL, FALSE);
-		}
+	// TODO: 만약 다음 프레임이 현재 프레임과 다른 크기이면 bErase TRUE 설정
+	frame* prev_fr = &mv.frames[prev_frame_id];
+	frame* curr_fr = &mv.frames[currentFrameId];
+
+	if (prev_fr->header.width != curr_fr->header.width
+		|| prev_fr->header.height != curr_fr->header.height) {
+		//RECT rect = { .left = 0, };
+		InvalidateRect(hWnd, NULL, TRUE);
 	}
+	else {
+		InvalidateRect(hWnd, NULL, FALSE);
+	}
+#endif
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -449,25 +489,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			OpenBitmapMovieSelectWindow(hWnd);
 
-			// 새로운 스레드 큐 생성
-			//if (hTimerQueue == NULL) {
-			//	// 타이머 큐를 생성
-			//	hTimerQueue = CreateTimerQueue();
-			//	if (NULL == hTimerQueue) {
-			//		return 1;
-			//	}
-			//	int interval = (int)(1000 / mv.header.fps);
-			//	// 타이머를 타이머 큐에 추가 (33ms마다 콜백 호출)
-			//	if (!CreateTimerQueueTimer(&hTimer, hTimerQueue,
-			//		(WAITORTIMERCALLBACK)UpdateFrameCallback,
-			//		hWnd, 0, interval, 0)) {
-			//		return 1;
-			//	}
-			//}
-
 			if (mv.header.total_frame_count != 0) {
-				// TODO: 타이머 설정 밀리초
+				// 업데이트 주기
+				// 밀리초 단위이므로 1000밀리초(1초)를 fps로 나눔
 				int interval = (int)(1000 / mv.header.fps);
+				// SetTimer 해상도의 한계
+				mvStartTime = timeGetTime();
 				SetTimer(hWnd, TIMER_ID, interval, (TIMERPROC)DrawBmpMovieCallback);
 			}
 		}
@@ -508,8 +535,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (wParam == VK_SPACE)
 		{
 			if (mv.header.total_frame_count != 0) {
-				currentFrameId++;
-				currentFrameId %= mv.header.total_frame_count;
+				current_frame_id++;
+				current_frame_id %= mv.header.total_frame_count;
 				InvalidateRect(hWnd, NULL, TRUE);
 			}
 		}

@@ -435,5 +435,5 @@ FodyWeavers.xsd
 
 # Test Big Resources
 resources/test/*
+resources/bms/*
 BmpEncoder/bms/*
-

@@ -14,3 +14,5 @@
 #include <memory.h>
 #include <tchar.h>
 #include <commdlg.h>
+
+#pragma comment(lib, "winmm.lib")
