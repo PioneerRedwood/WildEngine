@@ -436,3 +436,7 @@ FodyWeavers.xsd
 # Test Big Resources
 resources/test/*
 resources/bms/*
+
+# SDL other files
+WildEngine/SDL2/cmake/*
+WildEngine/SDL2/docs/*
