@@ -104,12 +104,14 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 
 #define BUF_SIZE 255
 
-#define BMP_PREFIX "../resources/test/ironman/"
-#define OUTFILE "../resources/bms/ironman.bm"
+//#define BMP_PREFIX "../resources/test/ironman/"
+//#define OUTFILE "../resources/bms/ironman.bm"
 //#define BMP_PREFIX "../resources/small/"
 //#define OUTFILE "../resources/bms/small.bm"
 //#define BMP_PREFIX "../resources/random/"
 //#define OUTFILE "../resources/bms/random.bm"
+#define BMP_PREFIX "../resources/dresden/"
+#define OUTFILE "../resources/bms/dresden.bm"
 
 #define FPS 30
 
