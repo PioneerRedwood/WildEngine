@@ -7,7 +7,7 @@ typedef struct {
   uint32_t size;
   uint16_t reserved1;
   uint16_t reserved2;
-  uint32_t pixel_start_offset;
+  uint32_t pixelStartOffset;
 } BitmapHeaderInfo;
 #pragma pack(pop)
 
@@ -15,14 +15,14 @@ typedef struct {
   uint32_t size;
   uint32_t width;
   uint32_t height;
-  uint16_t num_color_planes;
-  uint16_t bits_per_pixel;
-  uint32_t compression_method;
-  uint32_t image_size;
-  int32_t horizontal_resolution;
-  int32_t vertical_resolution;
-  uint32_t color_palette;
-  uint32_t num_important_colors;
+  uint16_t numColorPlanes;
+  uint16_t bitsPerPixel;
+  uint32_t compressionMethod;
+  uint32_t imageSize;
+  int32_t horizontalResolution;
+  int32_t verticalResolution;
+  uint32_t colorPalette;
+  uint32_t numImportantColors;
 } BitmapHeader;
 
 typedef struct {
