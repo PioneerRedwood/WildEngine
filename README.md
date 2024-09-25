@@ -1,11 +1,7 @@
-# BitmapLoader
+# WildEngine
+- 간단한 2D 그래픽 엔진
 
-## 요구사항
-- C 작성
-- Windows 작동
-
-## 동작
-1. 비트맵 읽기
-2. 비트맵 렌더링
-3. 비트맵 확대 / 축소
-4. 비트맵 무비 렌더링
+## Contents
+- Windows Bitmap Loader
+- Windows Bitmap Movie Encoder
+- SDL Bitmap Movie Streaming

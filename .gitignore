@@ -438,5 +438,5 @@ resources/test/*
 resources/bms/*
 
 # SDL other files
-WildEngine/SDL2/cmake/*
-WildEngine/SDL2/docs/*
+SDL2/cmake/*
+SDL2/docs/*

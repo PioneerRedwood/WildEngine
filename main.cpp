@@ -6,6 +6,11 @@ SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 int quit = 0; // 메인 루프 플래그
 
+static SDL_Texture* CreateTextureFromBitmap(SDL_Renderer* renderer, 
+																						const char* path) {
+
+}
+
 static void Update(SDL_Renderer* renderer) {
 	// 지정한 그리기 색상으로 클리어
 	SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
@@ -20,8 +25,6 @@ static void Update(SDL_Renderer* renderer) {
 	//	}
 	//}
 
-	// 사각형 그리기
-	
 
 	// 이전 호출 이후 수행된 그리기 명령을 화면에 적용 (SDL_Render* 패밀리에 해당)
 	SDL_RenderPresent(renderer);
