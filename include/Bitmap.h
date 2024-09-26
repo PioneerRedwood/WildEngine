@@ -31,3 +31,29 @@ typedef struct {
   uint8_t* pixelData;
 } Bitmap;
 
+#pragma pack(push, 1)
+typedef struct {
+  uint64_t pixelDataOffset;
+  uint32_t index;
+  uint32_t width;
+  uint32_t height;
+} FrameHeader;
+#pragma pack(pop)
+
+typedef struct {
+  uint64_t size;
+  uint32_t totalFrameCount;
+  uint32_t fps;
+} MovieHeader;
+
+typedef struct {
+  FrameHeader header;
+  uint8_t* pixelData;
+  SDL_Texture* texture;
+} Frame;
+
+typedef struct {
+  MovieHeader header;
+  std::map<int, Frame> frames;
+  FILE* fp;
+} Movie;
