@@ -26,6 +26,7 @@ int quit = 0;
 
 //Bitmap bitmap = { 0 };
 Movie mv = { 0 };
+uint64_t mvStartedTime = 0;
 SDL_Texture* texture = NULL;
 
 #define MAX_READY_FRAME 64
@@ -176,7 +177,7 @@ static bool ReadBitmapMovie(Movie& mv, const char* path) {
 		fr.pixelData = (uint8_t*)malloc(size);
 		if (fr.pixelData == NULL) {
 			// 메모리 할당 실패 처리
-			std::cout << "사전 프레임 읽기에 필요한 메모리 할당에 실패했습니다. \n";
+			std::cout << "Failed to pre-load frames \n";
 			break;
 		}
 
@@ -195,9 +196,11 @@ static bool ReadBitmapMovie(Movie& mv, const char* path) {
 	return true;
 }
 
-static int GetCurrentFrameIDByElapsed(const Movie& mv, double delta) {
+static int GetCurrentFrameIDByElapsed(const Movie& mv, uint64_t elapsed) {
 	const float indexUnit = (float)mv.header.fps / 1000;
-	int frameId = ((int)(delta * indexUnit) % mv.header.totalFrameCount);
+	int frameId = (int)(elapsed * indexUnit / 1000); // 밀리초로 변경
+	frameId %= mv.header.totalFrameCount;
+	std::cout << "Bmp frame " << frameId << " / " << mv.header.totalFrameCount << std::endl;
 	return frameId;
 }
 
@@ -239,12 +242,11 @@ static void Update(double delta) {
 	// 이때 픽셀데이터로 텍스처를 생성하기에는 퍼포먼스가 제대로 나지 않을 것이다..
 	// 그래도 메인 스레드에서 텍스처 생성을 수행해야 한다..
 	
-	int currentFrameId = GetCurrentFrameIDByElapsed(mv, delta);
-	Frame& fr = mv.frames[ currentFrameId ];
-
+	int currentFrameId = GetCurrentFrameIDByElapsed(mv, (SDL_GetPerformanceCounter() - mvStartedTime));
+	Frame* fr = &mv.frames[ currentFrameId ];
 	SDL_Rect rect = { 0 };
-	rect.x = 0, rect.y = 0, rect.w = fr.header.width, rect.h = fr.header.height;
-	SDL_RenderCopy(renderer, fr.texture, NULL, &rect);
+	rect.x = 0, rect.y = 0, rect.w = fr->header.width, rect.h = fr->header.height;
+	SDL_RenderCopy(renderer, fr->texture, NULL, &rect);
 
 	// 이전 호출 이후 수행된 그리기 명령을 화면에 적용 (SDL_Render* 패밀리에 해당)
 	SDL_RenderPresent(renderer);
@@ -252,7 +254,7 @@ static void Update(double delta) {
 
 int main(int argc, char** argv) {
 	if (not InitProgram(640, 480)) {
-		std::cout << "프로그램 종료\n";
+		std::cout << "Exit.. \n";
 		return 1;
 	}
 
@@ -269,13 +271,14 @@ int main(int argc, char** argv) {
 	//	return 1;
 	//}
 	if (!ReadBitmapMovie(mv, "resources/bms/dresden.bm")) {
-		std::cout << "ReadBitmapMovie 실패 \n";
+		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
 	}
 
 	// 시작 시간
 	currentTime = SDL_GetPerformanceCounter();
+	mvStartedTime = currentTime;
 
 	// 메인 루프
 	while (not quit) {
@@ -295,6 +298,8 @@ int main(int argc, char** argv) {
 
 		// 현재 프레임 그리기 수행
 		Update(deltaTime);
+
+		//_sleep(100);
 	}
 
 	ExitProgram();
