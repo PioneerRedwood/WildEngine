@@ -6,12 +6,16 @@
 #include <map>
 
 #include <process.h> // _beginThread
-//#include <synchapi.h> // CriticalSection
+#include <windows.h>
+#include <synchapi.h> // CriticalSection
 
 #include "Bitmap.h"
 
 // fopen 경고 끄기
 #pragma warning(disable : 4996)
+
+// TODO: 일부러 낮은 프레임만 미리 로드
+#define MAX_PRELOAD_FRAME_COUNT 64
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -29,9 +33,12 @@ Movie mv = { 0 };
 uint64_t mvStartedTime = 0;
 SDL_Texture* texture = NULL;
 
-#define MAX_READY_FRAME 64
-std::map<unsigned, Frame> readyFrameMap;
-//CRITICAL_SECTION criticalSection;
+// 프리로드 수만큼의 프레임을 로드할 배열
+// 생산자 스레드에서는 이 프리로드된 프레임을 채우게 될 것이고
+// 사용자 스레드에서는 이 프리로드된 프레임을 사용한 뒤 제거할 것
+Frame preloads[ MAX_PRELOAD_FRAME_COUNT ] = {0};
+uint32_t lastDrawFrameID = 0;
+CRITICAL_SECTION cs;
 
 static bool InitProgram(int width, int height) {
 	// SDL 초기화
@@ -142,10 +149,11 @@ static SDL_Texture* CreateTextureFromPath(SDL_Renderer* renderer, const char* pa
 
 static bool ReadBitmapMovie(Movie& mv, const char* path) {
 	mv.fp = fopen(path, "rb");
-	if (mv.fp == NULL) { 
-		std::cout << "ReadBitmapMovie 실패. 파일을 읽을 수 없습니다: " << path << std::endl;
-		return false; 
+	if (mv.fp == NULL) {
+		std::cout << "ReadBitmapMovie Failed to read file: " << path << std::endl;
+		return false;
 	}
+	std::cout << "ReadBitmapMovie started file path " << path << std::endl;
 
 	// 헤더 읽기
 	const long headerStartOffset = (-1) * sizeof(MovieHeader);
@@ -164,92 +172,139 @@ static bool ReadBitmapMovie(Movie& mv, const char* path) {
 		mv.frames.emplace(i, std::move(fr));
 	}
 
-	int count = mv.header.totalFrameCount < MAX_READY_FRAME ? mv.header.totalFrameCount : MAX_READY_FRAME;
+	std::cout << "ReadBitmapMovie " << mv.frames.size() << " frames header read \n";
+
+	// TODO: 미리 로드하는 크기는 전체 프레임 수보다 항상 작도록 설정
+	int count = mv.header.totalFrameCount < MAX_PRELOAD_FRAME_COUNT ? mv.header.totalFrameCount : MAX_PRELOAD_FRAME_COUNT;
 
 	// #2 pass - 지정한 사전 읽을 수만큼 픽셀 데이터 읽어오기
 	for (int i = 0; i < count; ++i) {
-		Frame& fr = mv.frames[ i ];
-		fseek(mv.fp, fr.header.pixelDataOffset, SEEK_SET);
+		Frame* fr = &mv.frames[ i ];
+		fseek(mv.fp, fr->header.pixelDataOffset, SEEK_SET);
 
-		int stride = ((fr.header.width * 3 + 3) & ~3);
-		int size = fr.header.height * stride;
+		int stride = ((fr->header.width * 3 + 3) & ~3);
+		int size = fr->header.height * stride;
 
-		fr.pixelData = (uint8_t*)malloc(size);
-		if (fr.pixelData == NULL) {
+		fr->pixelData = (uint8_t*)malloc(size);
+		if (fr->pixelData == NULL) {
 			// 메모리 할당 실패 처리
 			std::cout << "Failed to pre-load frames \n";
 			break;
 		}
 
-		fread(fr.pixelData, size, 1, mv.fp);
+		fread(fr->pixelData, size, 1, mv.fp);
 
-		auto tex = CreateTextureFromPixel(renderer, fr.header.width, fr.header.height, fr.pixelData);
-		free(fr.pixelData);
-		fr.pixelData = NULL;
-		fr.texture = tex;
+		auto tex = CreateTextureFromPixel(renderer, fr->header.width, fr->header.height, fr->pixelData);
+		free(fr->pixelData);
+		fr->pixelData = NULL;
+		fr->texture = tex;
 
-		//EnterCriticalSection(&criticalSection);
-		readyFrameMap.emplace(i, fr);
-		//LeaveCriticalSection(&criticalSection);
+		preloadedFrames.emplace(fr->header.index, fr);
 	}
+
+	std::cout << "ReadBitmapMovie preload: " << count << " " << mv.header.totalFrameCount << " completed \n";
 
 	return true;
 }
 
 static int GetCurrentFrameIDByElapsed(const Movie& mv, uint64_t elapsed) {
-	const float indexUnit = (float)mv.header.fps / 1000;
-	int frameId = (int)(elapsed * indexUnit / 1000); // 밀리초로 변경
+	//const float indexUnit = (float)mv.header.fps / 1000;
+	const float indexUnit = (float)1 / 1000;
+	int frameId = (int)(elapsed * indexUnit);
 	frameId %= mv.header.totalFrameCount;
 	std::cout << "Bmp frame " << frameId << " / " << mv.header.totalFrameCount << std::endl;
 	return frameId;
 }
 
+// 생산자 스레드. 
 void ReadBitmapMovieThread(void* ignored) {
-	//while (true) {
-	//	EnterCriticalSection(&criticalSection);
+	int maxPreloadCount = mv.header.totalFrameCount < MAX_PRELOAD_FRAME_COUNT ? mv.header.totalFrameCount : MAX_PRELOAD_FRAME_COUNT;
+	while (true) {
+		EnterCriticalSection(&cs);
 
-	//	// 만약 준비된 프레임 수가 임계치보다 낮아진 경우
-	//	if (readyFrameMap.size() < MAX_READY_FRAME) {
-	//		// 현재 프레임이후로부터의 프레임을 읽어오기
+		int numPreloaded = preloadedFrames.size();
+		if (numPreloaded < maxPreloadCount) {
+			// 현재 프레임이후로부터의 프레임을 읽어오기
 
-	//	}
-	//	LeaveCriticalSection(&criticalSection);
-	//	Sleep(100);
-	//}
+			// 단순하게 마지막에 있는 프레임 그 다음의 프레임을 로드
+			uint32_t startFrameId = (lastDrawFrameID + 1) % mv.header.totalFrameCount;
+
+			auto found = mv.frames.find(startFrameId);
+			if (found == mv.frames.end()) {
+				SDL_assert(false);
+			}
+
+			Frame* startFrame = &mv.frames[ startFrameId ];
+			for (int i = 0; i < maxPreloadCount - numPreloaded; ++i) {
+				Frame* fr = &startFrame[ i ];
+				fseek(mv.fp, fr->header.pixelDataOffset, SEEK_SET);
+
+				int stride = ((fr->header.width * 3 + 3) & ~3);
+				int frSize = fr->header.height * stride;
+				fr->pixelData = (uint8_t*)malloc(frSize);
+				if (fr->pixelData != NULL) {
+					fread(fr->pixelData, frSize, 1, mv.fp);
+				}
+
+				// 해당 스레드에서 텍스처를 생성하면 스레드가 멈춰버린다
+				//fr->texture = CreateTextureFromPixel(renderer, fr->header.width, fr->header.height, fr->pixelData);
+
+				preloadedFrames.emplace(fr->header.index, fr);
+			}
+		}
+
+		LeaveCriticalSection(&cs);
+
+		// 해당 스레드가 많이 갖지 못하도록 대기
+		Sleep(20);
+	}
+}
+
+static void UpdateMovie(double delta) {
+	if (mvStartedTime == 0) { mvStartedTime = SDL_GetPerformanceCounter(); }
+
+	// TODO: 경과시간을 기준으로 현재 프레임 ID를 구한다
+	uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
+	int currentFrameId = GetCurrentFrameIDByElapsed(mv, elapsed);
+
+	// TODO: 현재 그릴 프레임의 텍스처를 가져온다. 
+	EnterCriticalSection(&cs);
+
+	auto found = preloadedFrames.find(currentFrameId);
+	Frame* fr = nullptr;
+	if (found != preloadedFrames.end()) {
+		fr = found->second;
+	}
+	else {
+		// TODO: 만약 미리 로드된 리스트에 존재하지 않으면 그리지 않고 넘어간다. 
+		LeaveCriticalSection(&cs);
+		return;
+	}
+
+	if (fr->texture == NULL && fr->pixelData != NULL) {
+		// TODO: 픽셀 데이터로 텍스처 생성 - 메인 스레드에서 수행
+		fr->texture = CreateTextureFromPixel(renderer, fr->header.width, fr->header.height, fr->pixelData);
+	}
+	// TODO: 실제 그리기 수행
+	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_RenderClear(renderer);
+	SDL_Rect rect = { 0 }; rect.x = 0, rect.y = 0, rect.w = fr->header.width, rect.h = fr->header.height;
+	SDL_RenderCopy(renderer, fr->texture, NULL, &rect);
+	SDL_RenderPresent(renderer);
+
+	// TODO: 텍스처 삭제
+	SDL_DestroyTexture(fr->texture);
+	fr->texture = nullptr;
+
+	// TODO: 현재 사용한 프레임이 사용되었음을 설정 및 마지막으로 그린 프레임을 갖는 변수 업데이트
+	preloadedFrames.erase(currentFrameId);
+	lastDrawFrameID = currentFrameId;
+
+	LeaveCriticalSection(&cs);
 }
 
 static void Update(double delta) {
-	// 지정한 그리기 색상으로 클리어
-	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-	SDL_RenderClear(renderer);
-
-	// 점 그리기
-	// 그리기 색 설정
-	//SDL_SetRenderDrawColor(renderer, 255, 0, 0, 127);
-	//for (int y = 0; y < 200; ++y) {
-	//	for (int x = 0; x < 100; ++x) {
-	//		SDL_RenderDrawPoint(renderer, x, y);
-	//	}
-	//}
-
-	// 텍스처 렌더링
-	//if (texture != NULL) {
-	//	SDL_Rect rect = { 0 };
-	//	rect.x = 0, rect.y = 0, rect.w = bitmap.header.width, rect.h = bitmap.header.height;
-	//	SDL_RenderCopy(renderer, texture, NULL, &rect);
-	//}
-	
-	// 이때 픽셀데이터로 텍스처를 생성하기에는 퍼포먼스가 제대로 나지 않을 것이다..
-	// 그래도 메인 스레드에서 텍스처 생성을 수행해야 한다..
-	
-	int currentFrameId = GetCurrentFrameIDByElapsed(mv, (SDL_GetPerformanceCounter() - mvStartedTime));
-	Frame* fr = &mv.frames[ currentFrameId ];
-	SDL_Rect rect = { 0 };
-	rect.x = 0, rect.y = 0, rect.w = fr->header.width, rect.h = fr->header.height;
-	SDL_RenderCopy(renderer, fr->texture, NULL, &rect);
-
-	// 이전 호출 이후 수행된 그리기 명령을 화면에 적용 (SDL_Render* 패밀리에 해당)
-	SDL_RenderPresent(renderer);
+	UpdateMovie(delta);
 }
 
 int main(int argc, char** argv) {
@@ -258,35 +313,27 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	// CS 초기화
-	//InitializeCriticalSection(&criticalSection);
-
-	//HANDLE readBitmapMovieThread = (HANDLE)_beginthread(ReadBitmapMovieThread, 0, NULL);
-
-	// 텍스처 로드
-	//const char* filepath = "resources/dresden/1.bmp";
-	//texture = CreateTextureFromBitmap(renderer, filepath);
-	//if (texture == NULL) {
-	//	ExitProgram();
-	//	return 1;
-	//}
-	if (!ReadBitmapMovie(mv, "resources/bms/dresden.bm")) {
+	//if (!ReadBitmapMovie(mv, "resources/bms/castle.bm")) {
+		if (!ReadBitmapMovie(mv, "resources/bms/dresden.bm")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
 	}
 
+	// CS 초기화
+	InitializeCriticalSection(&cs);
+	HANDLE readBitmapMovieThread = (HANDLE)_beginthread(ReadBitmapMovieThread, 0, NULL);
+
 	// 시작 시간
 	currentTime = SDL_GetPerformanceCounter();
-	mvStartedTime = currentTime;
 
 	// 메인 루프
 	while (not quit) {
 		lastTime = currentTime;
 		currentTime = SDL_GetPerformanceCounter();
 
-		deltaTime = (double)( (currentTime - lastTime) * 1000 / (double)SDL_GetPerformanceFrequency() );
-		
+		deltaTime = (double)((currentTime - lastTime) * 1000 / (double)SDL_GetPerformanceFrequency());
+
 		SDL_Event e;
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_QUIT) {

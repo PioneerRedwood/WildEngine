@@ -50,10 +50,13 @@ typedef struct {
   FrameHeader header;
   uint8_t* pixelData;
   SDL_Texture* texture;
+  bool neededUpdate;
 } Frame;
 
 typedef struct {
   MovieHeader header;
-  std::map<int, Frame> frames;
+  uint64_t startedTime;
+  std::map<uint32_t, Frame> frames;
   FILE* fp;
+  uint64_t currentFrameId;
 } Movie;

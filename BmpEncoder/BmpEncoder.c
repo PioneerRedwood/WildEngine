@@ -110,10 +110,12 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 //#define OUTFILE "../resources/bms/small.bm"
 //#define BMP_PREFIX "../resources/random/"
 //#define OUTFILE "../resources/bms/random.bm"
-#define BMP_PREFIX "../resources/dresden/"
-#define OUTFILE "../resources/bms/dresden.bm"
+//#define BMP_PREFIX "../resources/dresden/"
+//#define OUTFILE "../resources/bms/dresden.bm"
+#define BMP_PREFIX "../resources/castle/"
+#define OUTFILE "../resources/bms/castle.bm"
 
-#define FPS 30
+#define FPS 12
 
 // 헤더가 꼭 앞에 있을 필요는 없음 - 발상의 전환
 // 한 프레임씩 저장 
