@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <map>
 
 #pragma pack(push, 1)
 typedef struct {
