@@ -14,7 +14,7 @@
 #pragma warning(disable : 4996)
 
 // TODO: 일부러 낮은 프레임만 미리 로드
-#define MAX_PRELOAD_FRAME_COUNT 64
+#define MAX_PRELOAD_FRAME_COUNT 256
 
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
@@ -36,19 +36,20 @@ SDL_Texture* texture = nullptr;
 // 생산자 스레드에서는 이 프리로드된 프레임을 채우게 될 것이고
 // 사용자 스레드에서는 이 프리로드된 프레임을 사용한 뒤 제거할 것
 Frame preloads[ MAX_PRELOAD_FRAME_COUNT ] = {0};
-uint32_t lastDrawFrameID = 0;
+std::vector<int> neededUpdateFrameIDs;
+int lastDrawFrameID = -1;
 CRITICAL_SECTION cs;
 
 static bool InitProgram(int width, int height) {
 	// SDL 초기화
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		std::cout << "SDL Init 실패! SDL_Error: " << SDL_GetError() << std::endl;
+		std::cout << "SDL Init failed! SDL_Error: " << SDL_GetError() << std::endl;
 		return false;
 	}
 
 	// SDL 윈도우 및 렌더러 생성
 	if (SDL_CreateWindowAndRenderer(width, height, 0, &window, &renderer) != 0) {
-		std::cout << "SDL 윈도우 및 렌더러 생성 실패! SDL_Error: " << SDL_GetError() << std::endl;
+		std::cout << "SDL Create window and render failed! SDL_Error: " << SDL_GetError() << std::endl;
 		SDL_Quit();
 		return false;
 	}
@@ -57,7 +58,7 @@ static bool InitProgram(int width, int height) {
 }
 
 static void ExitProgram() {
-	std::cout << "프로그램 종료\n";
+	std::cout << "Program exit \n";
 
 	// 윈도우/렌더러 파괴
 	SDL_DestroyWindow(window);
@@ -100,7 +101,7 @@ static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, in
 	uint8_t* flippedPixelData = (uint8_t*)malloc(stride * height);
 
 	if (flippedPixelData == nullptr) {
-		std::cout << "상하 반전을 위한 메모리 할당 실패 \n";
+		std::cout << "CreateTextureFromPixel failed to allocate to flip the pixel data \n";
 		return nullptr;
 	}
 
@@ -113,21 +114,21 @@ static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, in
 
 	// 만약 픽셀 데이터가 자주 변경되는 것이라면 SDL_TEXTUREACCESS_STREAMING을 사용해야 함.
 	// SDL_LockTexture, SDL_UnlockTexture 참고
-	SDL_Texture* tex = SDL_CreateTexture(renderer,
-		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STATIC,
-		width, height);
-	//SDL_Texture* tex = SDL_CreateTexture(renderer, 
-	//	SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, 
+	//SDL_Texture* tex = SDL_CreateTexture(renderer,
+	//	SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STATIC,
 	//	width, height);
+	SDL_Texture* tex = SDL_CreateTexture(renderer, 
+		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, 
+		width, height);
 	if (tex == nullptr) {
-		std::cout << "SDL 텍스처 생성 실패 SDL_Error: " << SDL_GetError() << std::endl;
+		std::cout << "SDL failed to create SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
 		free(flippedPixelData);
 		return nullptr;
 	}
 
 	int updateResult = SDL_UpdateTexture(tex, nullptr, flippedPixelData, stride);
 	if (updateResult != 0) {
-		std::cout << "SDL 텍스처 업데이트 실패 SDL_Error: " << SDL_GetError() << std::endl;
+		std::cout << "SDL failed to update SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
 		free(flippedPixelData);
 		return nullptr;
 	}
@@ -148,7 +149,7 @@ static SDL_Texture* CreateTextureFromPath(SDL_Renderer* renderer, const char* pa
 	return tex;
 }
 
-static bool UpdateTexture(SDL_Renderer* renderer, SDL_Texture* target, int w, int h, const uint8_t* data) {
+static bool UpdateTexture(SDL_Texture* target, int w, int h, const uint8_t* data) {
 	int stride = ((w * 3 + 3) & ~3);
 	// 텍스처를 픽셀데이터로 업데이트, 이 동작은 느리므로, 자주 변경되는 것은 STREAMING 모드로 텍스처를 생성할 것을 권장한다 
 	// 메모리 할당도 어떻게 이루어지는지?
@@ -225,6 +226,7 @@ static bool ReadBitmapMovie(Movie& mv, const char* path) {
 
 static int GetCurrentFrameIDByElapsed(uint64_t elapsed) {
 	//const float indexUnit = (float)mv.header.fps / 1000;
+	//const float indexUnit = (float)12 / 1000;
 	const float indexUnit = (float)1 / 1000;
 	int frameId = (int)(elapsed * indexUnit);
 	frameId %= mv.header.totalFrameCount;
@@ -235,52 +237,119 @@ static int GetCurrentFrameIDByElapsed(uint64_t elapsed) {
 static void LoadFrameThread(void* ignored) {
 	int maxPreloadCount = mv.header.totalFrameCount < MAX_PRELOAD_FRAME_COUNT ? mv.header.totalFrameCount : MAX_PRELOAD_FRAME_COUNT;
 	while (true) {
-		// 만약 더 미리 로드할 필요가 없다면?
+		// 만약 더 미리 로드할 필요가 없다면 그냥 탈출.
 		if (mv.header.totalFrameCount <= MAX_PRELOAD_FRAME_COUNT) {
-			Sleep(20);
-			continue;
+			//Sleep(20);
+			//continue;
+			break;
 		}
 
 		EnterCriticalSection(&cs);
 
-		// 이 시점까지 플래그가 설정된 것들은 다음 프레임을 미리 로드해야 한다. 
-
-		// 다음 프레임 정보를 어떻게 알지?
-		// 현재 프레임으로부터 미리로드된 프레임 배열 그 다음 프레임부터 로드해야 함
-		uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
-		int nextFrameId = GetCurrentFrameIDByElapsed(elapsed);
-		std::vector<Frame*> neededUpdatePixelFrames;
-		for (int i = 0; i < MAX_PRELOAD_FRAME_COUNT; ++i) {
-			if (preloads[ i ].neededUpdate) {
-				neededUpdatePixelFrames.push_back(&preloads[ i ]);
-			}
-
-			// 미리 로드된 프레임 배열 그 다음 프레임부터 로드.
-			// 이 코드의 맹점은 다시 재생 시 정상적으로 작동하지 않을 것임. 
-			if (preloads[ i ].header.index > nextFrameId) {
-				nextFrameId = preloads[ i ].header.index;
-			}
+		// 미리로드한 프레임의 2배가 되는 순간 
+		if (neededUpdateFrameIDs.empty()) {
+			LeaveCriticalSection(&cs);
+			continue;
 		}
 
-		// 사실상 미리 로드된 배열의 프레임 정보를 변경하는 것
-		for (Frame* fr : neededUpdatePixelFrames) {
-			// 헤더 정보 변경
+		// 다음 프레임 = (직전 프레임 + 미리 로드된 크기) % 전체 프레임 수 
+		uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
+		int currentFrame = GetCurrentFrameIDByElapsed(elapsed);
+		int nextFrameId = ((++currentFrame + MAX_PRELOAD_FRAME_COUNT) % mv.header.totalFrameCount);
+
+#if 0
+		// 업데이트가 필요한 아이디 순회 돌며 업데이트
+		for (int id : neededUpdateFrameIDs) {
+			id %= MAX_PRELOAD_FRAME_COUNT;
+			Frame* fr = &preloads[ id ];
+			// 헤더 정보
 			fr->header = mv.frames[ nextFrameId ].header;
-			
-			// 바디 정보 변경
+			// 바디 정보
 			int w = fr->header.width, h = fr->header.height, stride = ((w * 3 + 3) & ~3), size = stride * h;
 			fseek(mv.fp, fr->header.pixelDataOffset, SEEK_SET);
-			fr->pixelData = (uint8_t*)malloc(size);
-			fread(fr->pixelData, size, 1, mv.fp);
+			uint8_t* data = (uint8_t*)malloc(size);
+			fread(data, size, 1, mv.fp);
 
-			// 그 다음 프레임으로 설정
+			void* pixels = nullptr;
+			int pitch = 0;
+			if (SDL_LockTexture(fr->texture, nullptr, &pixels, &pitch) == 0) {
+				// 픽셀 업데이트 - 모든 이미지가 동일하다는 가정
+				// 만약 다르다면 그에 맞는 로직이 요구됨
+				if (pitch != stride) {
+					SDL_assert(false);
+				}
+				memcpy(pixels, data, size);
+			}
+			SDL_UnlockTexture(fr->texture);
+			free(data);
 			nextFrameId = (++nextFrameId % mv.header.totalFrameCount);
 		}
+		neededUpdateFrameIDs.clear();
+#else
+		bool neededUpdateAll = false;
+		for (int i : neededUpdateFrameIDs) {
+			if (i == -1) {
+				neededUpdateAll = true;
+				break;
+			}
+		}
+
+		if (neededUpdateAll) {
+			for (int i = 0; i < MAX_PRELOAD_FRAME_COUNT; ++i) {
+				Frame* fr = &preloads[ i ];
+				fr->header = mv.frames[ nextFrameId ].header;
+				int w = fr->header.width, h = fr->header.height, stride = ((w * 3 + 3) & ~3), size = stride * h;
+				fseek(mv.fp, fr->header.pixelDataOffset, SEEK_SET);
+				uint8_t* data = (uint8_t*)malloc(size);
+				fread(data, size, 1, mv.fp);
+
+				void* pixels = nullptr;
+				int pitch = 0;
+				if (SDL_LockTexture(fr->texture, nullptr, &pixels, &pitch) == 0) {
+					// 픽셀 업데이트 - 모든 이미지가 동일하다는 가정
+					// 만약 다르다면 그에 맞는 로직이 요구됨
+					if (pitch != stride) {
+						SDL_assert(false);
+					}
+					memcpy(pixels, data, size);
+				}
+				SDL_UnlockTexture(fr->texture);
+				free(data);
+				nextFrameId = ((++nextFrameId) % mv.header.totalFrameCount);
+			}
+			neededUpdateFrameIDs.clear();
+		}
+		else {
+			int updateId = neededUpdateFrameIDs.back();
+			updateId %= MAX_PRELOAD_FRAME_COUNT;
+			Frame* fr = &preloads[ updateId ];
+			// 헤더 정보
+			fr->header = mv.frames[ nextFrameId ].header;
+			// 바디 정보
+			int w = fr->header.width, h = fr->header.height, stride = ((w * 3 + 3) & ~3), size = stride * h;
+			fseek(mv.fp, fr->header.pixelDataOffset, SEEK_SET);
+			uint8_t* data = (uint8_t*)malloc(size);
+			fread(data, size, 1, mv.fp);
+
+			void* pixels = nullptr;
+			int pitch = 0;
+			if (SDL_LockTexture(fr->texture, nullptr, &pixels, &pitch) == 0) {
+				// 픽셀 업데이트 - 모든 이미지가 동일하다는 가정
+				// 만약 다르다면 그에 맞는 로직이 요구됨
+				if (pitch != stride) {
+					SDL_assert(false);
+				}
+				memcpy(pixels, data, size);
+			}
+			SDL_UnlockTexture(fr->texture);
+			free(data);
+			neededUpdateFrameIDs.pop_back();
+		}
+
+#endif
 
 		LeaveCriticalSection(&cs);
 
-		// 해당 스레드가 많이 갖지 못하도록 대기
-		Sleep(20);
 	}
 }
 
@@ -291,51 +360,38 @@ static void UpdateMovie(double delta) {
 	uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
 	int currentFrameId = GetCurrentFrameIDByElapsed(elapsed);
 
+	// 만약 이전 프레임과 현재 프레임이 같은 것이라면 업데이트할 필요 없음
+	if (currentFrameId == lastDrawFrameID) {
+		return;
+	}
+
 	std::cout << "UpdateMovie frame " << currentFrameId << " / " << mv.header.totalFrameCount << std::endl;
 
 	// TODO: 현재 그릴 프레임의 텍스처를 가져온다. 
 	EnterCriticalSection(&cs);
 
-	// TODO: 미리 로드한 프레임 배열의 준비된 것들의 텍스처를 업데이트
-
 	// TODO: 미리 로드한 프레임 배열에서 탐색
 	Frame* fr = nullptr;
+	int preloadFrameIndex = 0;
 	for(int i = 0; i < MAX_PRELOAD_FRAME_COUNT; ++i) {
 		if (preloads[ i ].header.index == currentFrameId) {
 			fr = &preloads[ i ];
+			preloadFrameIndex = i;
 			break;
 		}
 	}
 	if (fr == nullptr) {
 		// TODO: 만약 미리 로드된 리스트에 존재하지 않으면 그리지 않고 넘어간다. 
-		std::cout << "UpdateMovie Skip this frame \n";
+		//std::cout << "UpdateMovie Skip this frame, there is no frame to render [ FrameID: " << currentFrameId << " ]\n";
+		
+		// 만약 존재하지 않으면 어떻게 해야 다음을 준비할 수 있도록 해야 하는가?
+		// 0번째 미리로드 텍스처를 업데이트하도록?
+		// -1은 전체를 모두 업데이트하도록 하는 것. 
+		neededUpdateFrameIDs.push_back(-1);
 		LeaveCriticalSection(&cs);
 		return;
 	}
 
-	// TODO: 픽셀 데이터로 텍스처 업데이트
-	if (fr->neededUpdate && fr->pixelData != nullptr) {
-		//fr->texture = CreateTextureFromPixel(renderer, fr->header.width, fr->header.height, fr->pixelData);
-		if (!UpdateTexture(renderer, fr->texture, fr->header.width, fr->header.height, fr->pixelData)) {
-			// 텍스처 업데이트 실패
-			std::cout << "UpdateTexture failed in UpdateMovie skip this frame \n";
-			LeaveCriticalSection(&cs);
-			return;
-		}
-		fr->neededUpdate = false;
-	}
-	else if (not fr->neededUpdate && fr->pixelData != nullptr) {
-
-		fr->texture = CreateTextureFromPixel(renderer, fr->header.width, fr->header.height, fr->pixelData);
-		if (fr->texture == nullptr) { 
-			// 텍스처 생성 실패
-			std::cout << "CreateTextureFromPixel failed, skip this frame [ error: " << SDL_GetError() << " ]\n";
-			LeaveCriticalSection(&cs);
-			return;
-		}
-		// 픽셀 데이터 삭제
-		free(fr->pixelData);
-	}
 	// TODO: 실제 그리기 수행
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 	SDL_RenderClear(renderer);
@@ -343,13 +399,10 @@ static void UpdateMovie(double delta) {
 	SDL_RenderCopy(renderer, fr->texture, nullptr, &rect);
 	SDL_RenderPresent(renderer);
 
-	// TODO: 텍스처 삭제
-	//SDL_DestroyTexture(fr->texture);
-	//fr->texture = nullptr;
+	lastDrawFrameID = fr->header.index;
 
 	// TODO: 현재 사용한 프레임이 사용되었음을 설정
-	fr->neededUpdate = true;
-
+	neededUpdateFrameIDs.push_back(preloadFrameIndex);
 	LeaveCriticalSection(&cs);
 }
 
@@ -363,8 +416,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	//if (!ReadBitmapMovie(mv, "resources/bms/castle.bm")) {
-		if (!ReadBitmapMovie(mv, "resources/bms/dresden.bm")) {
+	if (!ReadBitmapMovie(mv, "resources/bms/castle.bm")) {
+	//if (!ReadBitmapMovie(mv, "resources/bms/dresden.bm")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
