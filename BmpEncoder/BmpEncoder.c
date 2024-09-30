@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+
 // 비트맵 로드에 필요한 구조체 선언
 #pragma pack(push, 1)
 typedef struct {
@@ -102,6 +103,7 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 	return SUCCESS;
 }
 
+#if 0
 #define BUF_SIZE 255
 
 //#define BMP_PREFIX "../resources/test/ironman/"
@@ -185,3 +187,64 @@ int main(int argc, char** argv)
 
 	return 0;
 }
+
+#else
+
+// 새로운 구조의 BitmapMovie 선언
+// 입력: 1, 2, 3, ... n.bmp 디렉토리 경로. 
+// 출력: videos/아래에 새로운 Video 파일 쓰기. 
+// 시나리오: 비트맵을 읽을 수 없을 때까지 계속 로드, 동시에 픽셀데이터를 파일에 저장. 
+// 마지막 프레임을 저장하고 난 뒤 헤더 작성. 헤더에는 프레임 수, 프레임 크기, 초당 프레임 수, 프레임 별 픽셀 오프셋 저장
+// 사실상 프레임의 픽셀 데이터 오프셋은 
+
+typedef struct {
+	uint32_t frameCount;
+	uint32_t width;
+	uint32_t height;
+	uint32_t fps;
+} VideoHeader;
+
+//#define OUTFILE "../resources/videos/castle.mv";
+//#define IN_DIR "../resources/castle/"
+
+#define OUTFILE "../resources/videos/dresden.mv"
+#define IN_DIR "../resources/dresden/"
+
+#define FPS 12
+
+int main(int argc, char** argv) {
+	FILE* fp = fopen(OUTFILE, "wb");
+	if(fp == NULL) { printf("Cannot open file %s \n", OUTFILE); return 1; }
+
+	VideoHeader header = { 0 };
+	int i = 1;
+	while(true) {
+		char filepathBuf[256];
+		snprintf(filepathBuf, 256, "%s%d.bmp", IN_DIR, i);
+
+		bitmap bmp = { 0 };
+		if(LoadBitmap(&bmp, filepathBuf) == 0) {
+			// success
+			int stride = ((bmp.header.width * 3 + 3) & ~3);
+			int size = stride * bmp.header.height;
+			fwrite(bmp.pixel_data, size, 1, fp);
+			header.frameCount++;
+			header.width = bmp.header.width;
+			header.height = bmp.header.height;
+		} else {
+			// failure
+			break;
+		}
+
+		++i;
+	}
+
+	// 헤더 파일에 쓰기
+	header.fps = FPS;
+	fwrite(&header, sizeof(VideoHeader), 1, fp);
+
+	fclose(fp);
+	return 0;
+}
+
+#endif

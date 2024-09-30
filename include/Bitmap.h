@@ -61,3 +61,15 @@ typedef struct {
   FILE* fp;
   uint64_t currentFrameId;
 } Movie;
+
+typedef struct {
+  uint32_t frameCount;
+  uint32_t width;
+  uint32_t height;
+  uint32_t fps;
+} VideoHeader;
+
+typedef struct {
+  VideoHeader header;
+  uint64_t* framePixelOffsets;
+} Video;
