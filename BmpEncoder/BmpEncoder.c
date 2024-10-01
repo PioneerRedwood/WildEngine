@@ -100,6 +100,8 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 
 	fclose(fp);
 
+	printf("LoadBitmap %s success!\n", path);
+
 	return SUCCESS;
 }
 
@@ -204,11 +206,14 @@ typedef struct {
 	uint32_t fps;
 } VideoHeader;
 
-//#define OUTFILE "../resources/videos/castle.mv";
-//#define IN_DIR "../resources/castle/"
+#define OUTFILE "../resources/videos/castle.mv"
+#define IN_DIR "../resources/test/castle/"
 
-#define OUTFILE "../resources/videos/dresden.mv"
-#define IN_DIR "../resources/dresden/"
+//#define OUTFILE "../resources/videos/dresden.mv"
+//#define IN_DIR "../resources/dresden/"
+
+//#define OUTFILE "../resources/videos/medium.mv"
+//#define IN_DIR "../resources/medium/"
 
 #define FPS 12
 

@@ -435,7 +435,8 @@ FodyWeavers.xsd
 
 # Test Big Resources
 resources/test/*
-resources/bms/*
+resources/videos/test/*
+resources/videos/*
 
 # SDL other files
 SDL2/cmake/*
