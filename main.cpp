@@ -10,7 +10,7 @@
 
 #include "Video.h"
 
-#define MAX_PRELOAD_FRAME_COUNT 16
+#define MAX_PRELOAD_FRAME_COUNT 2
 
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
@@ -24,7 +24,7 @@ double deltaTime = 0;
 int quit = 0;
 
 Video v;
-uint64_t mvStartedTime = 0;
+uint64_t videoStartTime = 0;
 
 // 프리로드 수만큼의 프레임을 로드할 배열
 // 생산자 스레드에서는 이 프리로드된 프레임을 채우게 될 것이고
@@ -139,11 +139,13 @@ static void LoadFrameThread(void* arg) {
 		}
 
 		// 다음 프레임 = (직전 프레임 + 미리 로드된 크기 + 1) % 전체 프레임 수 
-		uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
-		int nextFrameId = v->getCurrentFrameIDByElapsed(elapsed) + MAX_PRELOAD_FRAME_COUNT + 1;
+		// 특정 시간으로부터 경과한 밀리초 구하기
+		double elapsed = (double)(SDL_GetPerformanceCounter() - videoStartTime) / SDL_GetPerformanceFrequency() * 1000;
+		int nextFrameId = v->getCurrentFrameIDByElapsed(elapsed);
 		nextFrameId %= v->header().frameCount;
 
-		Frame* fr = &preloadFrames[ neededUpdateFrameIDs.back() ];
+		int lastFrameId = neededUpdateFrameIDs.back();
+		Frame* fr = &preloadFrames[ lastFrameId ];
 
 		uint8_t* data = (uint8_t*)malloc(size);
 		if (data == nullptr) {
@@ -182,18 +184,19 @@ static void LoadFrameThread(void* arg) {
 }
 
 static void Update(double delta) {
-	if (mvStartedTime == 0) { mvStartedTime = SDL_GetPerformanceCounter(); }
+	if (videoStartTime == 0) { videoStartTime = SDL_GetPerformanceCounter(); }
 
 	// 경과시간을 기준으로 현재 프레임 ID를 구한다
-	uint64_t elapsed = (uint64_t)((SDL_GetPerformanceCounter() - mvStartedTime) / 1000);
+	// 특정 시간으로부터 경과한 밀리초 구하기
+	double elapsed = (double)(SDL_GetPerformanceCounter() - videoStartTime) / SDL_GetPerformanceFrequency() * 1000;
 	int currentFrameId = v.getCurrentFrameIDByElapsed(elapsed);
+
+	//std::cout << "Elapsed since video started " << elapsed << "ms - " << currentFrameId << " / " << v.header().frameCount << std::endl;
 
 	// 만약 이전 프레임과 현재 프레임이 같은 것이라면 업데이트할 필요 없음
 	if (currentFrameId == lastDrawFrameID) {
 		return;
 	}
-
-	std::cout << "UpdateMovie frame " << currentFrameId << " / " << v.header().frameCount << std::endl;
 
 	EnterCriticalSection(&cs);
 
@@ -211,6 +214,7 @@ static void Update(double delta) {
 	if (fr == nullptr) {
 		// TODO: 만약 미리 로드된 리스트에 존재하지 않으면 그리지 않고 넘어간다. 
 		//std::cout << "UpdateMovie Skip this frame, there is no frame to render [ FrameID: " << currentFrameId << " ]\n";
+		neededUpdateFrameIDs.push_back(0);
 		LeaveCriticalSection(&cs);
 		return;
 	}
@@ -262,7 +266,7 @@ int main(int argc, char** argv) {
 			fr->texture = CreateTextureFromPixel(renderer, v.header().width, v.header().height, data);
 			
 			// 임시로 텍스처 데이터 삭제하지 않도록 함
-			//free(data);
+			free(data);
 		}
 		printf("Preloading ended - %d \n", count);
 	}

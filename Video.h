@@ -30,7 +30,7 @@ public:
     return m_fp;
   }
 
-  int getCurrentFrameIDByElapsed(uint64_t elapsed) const;
+  int getCurrentFrameIDByElapsed(double elapsed) const;
 
   bool readVideoFromFile(const char* path);
 

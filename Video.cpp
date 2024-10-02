@@ -12,7 +12,7 @@ Video::~Video() {
 /// </summary>
 /// <param name="elapsed">밀리초 단위 경과 시간</param>
 /// <returns></returns>
-int Video::getCurrentFrameIDByElapsed(uint64_t elapsed) const {
+int Video::getCurrentFrameIDByElapsed(double elapsed) const {
 	int frameId = (int)(elapsed * m_indexUnit);
 	frameId %= m_header.frameCount;
 	return frameId;
@@ -73,7 +73,7 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 
 	uint64_t offset = m_framePixelOffsets[ frameId ];
 
-	printf("Video::readFrame %u - offset %llu \n", frameId, offset);
+	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
 	fseek(m_fp, offset, SEEK_SET);
 	int stride = ((m_header.width * 3 + 3) & ~3);
