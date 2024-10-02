@@ -68,6 +68,9 @@ typedef enum {
 	ALLOCATION_FAILED = 3,
 } LoadResult;
 
+// 상하반전을 위한 임시 픽셀 데이터 포인터
+uint8_t* tempMemory = NULL;
+
 int LoadBitmap(bitmap* bmp, const char* path) {
 	// TODO: 파일 읽기 형식으로 열기
 	if (path == NULL) { return INVALID_PATH; }
@@ -90,13 +93,29 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 	int stride = ((bmp->header.width * 3 + 3) & ~3);
 	int size = stride * bmp->header.height;
 
+	// TODO: 읽은 픽셀 데이터 상하 반전 위한 메모리 할당
+	if (tempMemory == NULL) {
+		tempMemory = (uint8_t*)malloc(size);
+		if (tempMemory == NULL) {
+			printf("상하반전에 필요한 데이터 할당에 실패했습니다.\n");
+			return ALLOCATION_FAILED;
+		}
+	}
+	fread(tempMemory, 1, size, fp);
+
 	bmp->pixel_data = (uint8_t*)malloc(size);
 	if (bmp->pixel_data == NULL) {
 		printf("비트맵 로드에 필요한 데이터 할당에 실패했습니다. \n");
 		return ALLOCATION_FAILED;
 	}
-	memset(bmp->pixel_data, 0, size);
-	fread(bmp->pixel_data, 1, size, fp);
+
+	// TODO: 상하반전 메모리 복사
+	for (int y = 0; y < bmp->header.height; ++y) {
+		memcpy(
+			bmp->pixel_data + (y * stride),
+			tempMemory + ((bmp->header.height - 1 - y) * stride),
+			stride);
+	}
 
 	fclose(fp);
 
@@ -206,14 +225,14 @@ typedef struct {
 	uint32_t fps;
 } VideoHeader;
 
-#define OUTFILE "../resources/videos/castle.mv"
-#define IN_DIR "../resources/test/castle/"
+//#define OUTFILE "../resources/videos/castle.mv"
+//#define IN_DIR "../resources/test/castle/"
 
 //#define OUTFILE "../resources/videos/dresden.mv"
 //#define IN_DIR "../resources/dresden/"
 
-//#define OUTFILE "../resources/videos/medium.mv"
-//#define IN_DIR "../resources/medium/"
+#define OUTFILE "../resources/videos/medium.mv"
+#define IN_DIR "../resources/medium/"
 
 #define FPS 12
 
@@ -233,11 +252,13 @@ int main(int argc, char** argv) {
 			int stride = ((bmp.header.width * 3 + 3) & ~3);
 			int size = stride * bmp.header.height;
 			fwrite(bmp.pixel_data, size, 1, fp);
+			free(bmp.pixel_data);
 			header.frameCount++;
 			header.width = bmp.header.width;
 			header.height = bmp.header.height;
 		} else {
 			// failure
+			free(tempMemory);
 			break;
 		}
 

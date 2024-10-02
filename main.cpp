@@ -62,48 +62,29 @@ static void ExitProgram() {
 	SDL_Quit();
 }
 
-// 픽셀데이터로부터 상하반전된 텍스처를 생성함
 // 텍스처 접근 모드는 자주 변경되지 않는 텍스처라면 STATIC, 자주 변경된다면 STREAMING 사용 권장
 static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, int height, const uint8_t* data) {
-	// 이미지 상하 반전
 	int stride = ((width * 3 + 3) & ~3);
-	uint8_t* flippedPixelData = (uint8_t*)malloc(stride * height);
-
-	if (flippedPixelData == nullptr) {
-		std::cout << "CreateTextureFromPixel failed to allocate to flip the pixel data \n";
-		return nullptr;
-	}
-
-	for (int y = 0; y < height; ++y) {
-		memcpy(
-			flippedPixelData + (y * stride),
-			data + ((height - 1 - y) * stride),
-			stride);
-	}
 
 	// 만약 픽셀 데이터가 자주 변경되는 것이라면 SDL_TEXTUREACCESS_STREAMING을 사용해야 함.
 	// SDL_LockTexture, SDL_UnlockTexture 참고
 	//SDL_Texture* tex = SDL_CreateTexture(renderer,
 	//	SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STATIC,
 	//	width, height);
-	SDL_Texture* tex = SDL_CreateTexture(renderer, 
-		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, 
+	SDL_Texture* tex = SDL_CreateTexture(renderer,
+		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
 		width, height);
+
 	if (tex == nullptr) {
 		std::cout << "SDL failed to create SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
-		free(flippedPixelData);
 		return nullptr;
 	}
 
-	int updateResult = SDL_UpdateTexture(tex, nullptr, flippedPixelData, stride);
+	int updateResult = SDL_UpdateTexture(tex, nullptr, data, stride);
 	if (updateResult != 0) {
 		std::cout << "SDL failed to update SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
-		free(flippedPixelData);
 		return nullptr;
 	}
-
-	// 메모리 해제
-	free(flippedPixelData);
 
 	return tex;
 }
@@ -116,14 +97,6 @@ static void LoadFrameThread(void* arg) {
 	int h = v->header().height; 
 	int stride = ((w * 3 + 3) & ~3);
 	int size = stride * h;
-
-	// 뒤집기 위한 여분의 프레임 변수
-	uint8_t* flippedTemp = (uint8_t*)malloc(size);
-	if (flippedTemp == nullptr) { 
-		// 픽셀 뒤집기 위한 여분의 프레임 메모리 할당 실패
-		return;
-	}
-	memset(flippedTemp, 0, size);
 
 	while (true) {
 		// 만약 더 미리 로드할 필요가 없다면 그냥 탈출.
@@ -147,14 +120,14 @@ static void LoadFrameThread(void* arg) {
 		int lastFrameId = neededUpdateFrameIDs.back();
 		Frame* fr = &preloadFrames[ lastFrameId ];
 
-		uint8_t* data = (uint8_t*)malloc(size);
-		if (data == nullptr) {
+		fr->pixelData = (uint8_t*)malloc(size);
+		if (fr->pixelData == nullptr) {
 			// 메모리 할당 실패
 			SDL_assert(false);
 			LeaveCriticalSection(&cs);
 			continue;
 		}
-		if (not v->readFrame(nextFrameId, data)) {
+		if (not v->readFrame(nextFrameId, fr->pixelData)) {
 			// 읽기 실패
 			SDL_assert(false);
 			LeaveCriticalSection(&cs);
@@ -162,21 +135,14 @@ static void LoadFrameThread(void* arg) {
 		}
 		fr->index = nextFrameId;
 
-		// 상하반전 - 만약 파일을 구성할때부터 이걸 하면 런타임시 필요없을 것 같다
-		for (int y = 0; y < h; ++y) {
-			memcpy(
-				flippedTemp + (y * stride),
-				data + ((h - 1 - y) * stride),
-				stride);
-		}
-
 		void* pixels = nullptr;
 		int pitch = 0;
 		if (SDL_LockTexture(fr->texture, nullptr, &pixels, &pitch) == 0) {
-			memcpy(pixels, flippedTemp, size);
+			memcpy(pixels, fr->pixelData, size);
 		}
 		SDL_UnlockTexture(fr->texture);
-		free(data);
+		free(fr->pixelData);
+		fr->pixelData = nullptr;
 		neededUpdateFrameIDs.pop_back();
 
 		LeaveCriticalSection(&cs);
