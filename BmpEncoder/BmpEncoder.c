@@ -225,14 +225,14 @@ typedef struct {
 	uint32_t fps;
 } VideoHeader;
 
-//#define OUTFILE "../resources/videos/castle.mv"
-//#define IN_DIR "../resources/test/castle/"
+#define OUTFILE "../resources/videos/castle.mv"
+#define IN_DIR "../resources/test/castle/"
 
 //#define OUTFILE "../resources/videos/dresden.mv"
 //#define IN_DIR "../resources/dresden/"
 
-#define OUTFILE "../resources/videos/medium.mv"
-#define IN_DIR "../resources/medium/"
+//#define OUTFILE "../resources/videos/medium.mv"
+//#define IN_DIR "../resources/medium/"
 
 #define FPS 12
 

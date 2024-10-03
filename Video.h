@@ -36,8 +36,6 @@ public:
 
   bool readFrame(uint32_t frameId, uint8_t* out);
 
-  //static void loadFrameThread(void* arg);
-
   uint64_t startTime() {
     return m_startTime;
   }

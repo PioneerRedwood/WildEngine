@@ -29,7 +29,7 @@ uint64_t videoStartTime = 0;
 // 프리로드 수만큼의 프레임을 로드할 배열
 // 생산자 스레드에서는 이 프리로드된 프레임을 채우게 될 것이고
 // 사용자 스레드에서는 이 프리로드된 프레임을 사용한 뒤 제거할 것
-Frame preloadFrames[ MAX_PRELOAD_FRAME_COUNT ] = {0};
+Frame preloadFrames[ MAX_PRELOAD_FRAME_COUNT ] = { 0 };
 std::vector<int> neededUpdateFrameIDs;
 int lastDrawFrameID = -1;
 CRITICAL_SECTION cs;
@@ -92,9 +92,9 @@ static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, in
 // 생산자 스레드. 
 static void LoadFrameThread(void* arg) {
 	Video* v = (Video*)arg;
-	
+
 	int w = v->header().width;
-	int h = v->header().height; 
+	int h = v->header().height;
 	int stride = ((w * 3 + 3) & ~3);
 	int size = stride * h;
 
@@ -176,7 +176,7 @@ static void Update(double delta) {
 			break;
 		}
 	}
-	
+
 	if (fr == nullptr) {
 		// TODO: 만약 미리 로드된 리스트에 존재하지 않으면 그리지 않고 넘어간다. 
 		//std::cout << "UpdateMovie Skip this frame, there is no frame to render [ FrameID: " << currentFrameId << " ]\n";
@@ -205,9 +205,9 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	if (not v.readVideoFromFile("resources/videos/castle.mv")) {
-	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
-	//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/castle.mv")) {
+		//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
+		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
 				return 1;
 			}
 			fr->texture = CreateTextureFromPixel(renderer, v.header().width, v.header().height, data);
-			
+
 			// 임시로 텍스처 데이터 삭제하지 않도록 함
 			free(data);
 		}
@@ -251,6 +251,7 @@ int main(int argc, char** argv) {
 
 		deltaTime = (double)((currentTime - lastTime) * 1000 / (double)SDL_GetPerformanceFrequency());
 
+		// 이벤트 처리
 		SDL_Event e;
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_QUIT) {
@@ -258,9 +259,9 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		// 일부 오브젝트 상태 업데이트
+		// 오브젝트 업데이트
 
-		// 현재 프레임 그리기 수행
+		// 렌더링 업데이트
 		Update(deltaTime);
 
 		//_sleep(100);
