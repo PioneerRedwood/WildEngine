@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
 	}
 
 	//if (not v.readVideoFromFile("resources/videos/castle.mv")) {
-		//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
+	if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
