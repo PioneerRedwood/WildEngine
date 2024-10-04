@@ -24,7 +24,9 @@
 *.lai
 *.la
 *.a
-*.lib
+# *.lib
+/SDL2/lib/*/SDL2main.lib
+/SDL2/lib/*/SDL2test.lib
 
 # Executables
 *.exe
