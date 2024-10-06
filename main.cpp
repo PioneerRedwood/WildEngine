@@ -10,7 +10,7 @@
 
 #include "Video.h"
 
-#define MAX_PRELOAD_FRAME_COUNT 2
+#define MAX_PRELOAD_FRAME_COUNT 1
 
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
@@ -34,7 +34,7 @@ std::vector<int> neededUpdateFrameIDs;
 int lastDrawFrameID = -1;
 CRITICAL_SECTION cs;
 
-static bool InitProgram(int width, int height) {
+bool InitProgram(int width, int height) {
 	// SDL 초기화
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		std::cout << "SDL Init failed! SDL_Error: " << SDL_GetError() << std::endl;
@@ -51,7 +51,7 @@ static bool InitProgram(int width, int height) {
 	return true;
 }
 
-static void ExitProgram() {
+void ExitProgram() {
 	std::cout << "Program exit \n";
 
 	// 윈도우/렌더러 파괴
@@ -63,8 +63,11 @@ static void ExitProgram() {
 }
 
 // 텍스처 접근 모드는 자주 변경되지 않는 텍스처라면 STATIC, 자주 변경된다면 STREAMING 사용 권장
-static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, int height, const uint8_t* data) {
+SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, int height, const uint8_t* data) {
 	int stride = ((width * 3 + 3) & ~3);
+
+	// 스태틱은 락이 요구되어 느림. 스트리밍은 쉐어드 메모리 개념이므로 락이 요구되지 않아 변경이 자주 발생하면 상대적으로 빠름. 
+	// 이 락은 드라이버 레벨의 락임. 메모리 액세스와 CPU - GPU 간 대역폭
 
 	// 만약 픽셀 데이터가 자주 변경되는 것이라면 SDL_TEXTUREACCESS_STREAMING을 사용해야 함.
 	// SDL_LockTexture, SDL_UnlockTexture 참고
@@ -79,7 +82,8 @@ static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, in
 		std::cout << "SDL failed to create SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
 		return nullptr;
 	}
-
+	
+	// 실제로 업데이트할 때 락을 거는건지
 	int updateResult = SDL_UpdateTexture(tex, nullptr, data, stride);
 	if (updateResult != 0) {
 		std::cout << "SDL failed to update SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
@@ -90,7 +94,7 @@ static SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, in
 }
 
 // 생산자 스레드. 
-static void LoadFrameThread(void* arg) {
+void LoadFrameThread(void* arg) {
 	Video* v = (Video*)arg;
 
 	int w = v->header().width;
@@ -106,6 +110,12 @@ static void LoadFrameThread(void* arg) {
 
 		EnterCriticalSection(&cs);
 
+		// 버퍼링과 프레임 스키핑이 정상적으로 보이는지 화면에 보이게끔 수정.
+		// 락되는 영역이 최소화하기
+		// 1 2 3 4 5 6 7 8 9 10
+		// 1 -> [0]
+		// '3' 2 3 4 5 6 7 8 9 10
+		// '7' 2 3 4 5 6 7 8 9 10
 		if (neededUpdateFrameIDs.empty()) {
 			LeaveCriticalSection(&cs);
 			continue;
@@ -146,10 +156,13 @@ static void LoadFrameThread(void* arg) {
 		neededUpdateFrameIDs.pop_back();
 
 		LeaveCriticalSection(&cs);
+
+		// 무한 루프라 대기를 넣어줘야 CPU 과부하 피할 수 있음
+		Sleep(10);
 	}
 }
 
-static void Update(double delta) {
+void Update(double delta) {
 	if (videoStartTime == 0) { videoStartTime = SDL_GetPerformanceCounter(); }
 
 	// 경과시간을 기준으로 현재 프레임 ID를 구한다
@@ -167,6 +180,8 @@ static void Update(double delta) {
 	EnterCriticalSection(&cs);
 
 	// TODO: 현재 그릴 프레임의 텍스처를 가져온다. 미리 로드한 프레임 배열에서 탐색. 
+
+	// TODO: Preloads - 벡터로 만들것 
 	Frame* fr = nullptr;
 	int preloadFrameIndex = 0;
 	for (int i = 0; i < MAX_PRELOAD_FRAME_COUNT; ++i) {
@@ -205,8 +220,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	//if (not v.readVideoFromFile("resources/videos/castle.mv")) {
-	if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
+	if (not v.readVideoFromFile("resources/videos/castle.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
@@ -229,6 +244,7 @@ int main(int argc, char** argv) {
 				ExitProgram();
 				return 1;
 			}
+			// TODO: 텍스처를 하나만 생성해도 된다
 			fr->texture = CreateTextureFromPixel(renderer, v.header().width, v.header().height, data);
 
 			// 임시로 텍스처 데이터 삭제하지 않도록 함

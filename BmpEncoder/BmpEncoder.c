@@ -251,8 +251,8 @@ int main(int argc, char** argv) {
 			// success
 			int stride = ((bmp.header.width * 3 + 3) & ~3);
 			int size = stride * bmp.header.height;
-			fwrite(bmp.pixel_data, size, 1, fp);
-			free(bmp.pixel_data);
+			fwrite(bmp.pixel_data, size, 1, fp); // 패딩 필요 없음
+			free(bmp.pixel_data); // 자원낭비
 			header.frameCount++;
 			header.width = bmp.header.width;
 			header.height = bmp.header.height;
