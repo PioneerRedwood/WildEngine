@@ -32,7 +32,7 @@ bool Video::readVideoFromFile(const char* path) {
 	}
 
 	// 파일의 끝자락에서 헤더 정보 읽기
-	int headerStartOffset = (-1) * sizeof(VideoHeader);
+	int headerStartOffset = (-1) * (int)sizeof(VideoHeader);
 	fseek(m_fp, headerStartOffset, SEEK_END);
 	fread(&m_header, sizeof(VideoHeader), 1, m_fp);
 	fseek(m_fp, 0, SEEK_SET);
@@ -75,7 +75,7 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
-	fseek(m_fp, offset, SEEK_SET);
+	fseek(m_fp, (long)offset, SEEK_SET);
 	int stride = ((m_header.width * 3 + 3) & ~3);
 	uint64_t frameSize = (uint64_t)(stride * m_header.height);
 	fread(out, frameSize, 1, m_fp);
