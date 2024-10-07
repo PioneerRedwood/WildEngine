@@ -84,7 +84,10 @@ SDL_Texture* CreateTextureFromPixel(SDL_Renderer* renderer, int width, int heigh
 	}
 	
 	// 실제로 업데이트할 때 락을 거는건지
-	int updateResult = SDL_UpdateTexture(tex, nullptr, data, stride);
+	// TODO: SDL_LockTexture
+	void* pixelData;
+	int pitch;
+	int updateResult = SDL_LockTexture(tex, nullptr, &pixelData, &stride);
 	if (updateResult != 0) {
 		std::cout << "SDL failed to update SDL_Texture SDL_Error: " << SDL_GetError() << std::endl;
 		return nullptr;
@@ -102,64 +105,18 @@ void LoadFrameThread(void* arg) {
 	int stride = ((w * 3 + 3) & ~3);
 	int size = stride * h;
 
-	while (true) {
-		// 만약 더 미리 로드할 필요가 없다면 그냥 탈출.
-		if (v->header().frameCount <= MAX_PRELOAD_FRAME_COUNT) {
-			break;
-		}
+	// TODO: 정해진 수만큼 계속 채우는 것을 시도. 
+	
+	// TODO: 읽어야할 프레임을 파일로부터 읽기.
 
-		EnterCriticalSection(&cs);
+	// TODO: std::vector에 픽셀 데이터만 저장. 
+	
+	// CriticalSection의 사이에 있는 것은 최소한으로 줄이는 것이 좋음
+	
+	// TODO: CriticalSection 시작
 
-		// 버퍼링과 프레임 스키핑이 정상적으로 보이는지 화면에 보이게끔 수정.
-		// 락되는 영역이 최소화하기
-		// 1 2 3 4 5 6 7 8 9 10
-		// 1 -> [0]
-		// '3' 2 3 4 5 6 7 8 9 10
-		// '7' 2 3 4 5 6 7 8 9 10
-		if (neededUpdateFrameIDs.empty()) {
-			LeaveCriticalSection(&cs);
-			continue;
-		}
+	// TODO: CriticalSection 종료
 
-		// 다음 프레임 = (직전 프레임 + 미리 로드된 크기 + 1) % 전체 프레임 수 
-		// 특정 시간으로부터 경과한 밀리초 구하기
-		double elapsed = (double)(SDL_GetPerformanceCounter() - videoStartTime) / SDL_GetPerformanceFrequency() * 1000;
-		int nextFrameId = v->getCurrentFrameIDByElapsed(elapsed);
-		nextFrameId %= v->header().frameCount;
-
-		int lastFrameId = neededUpdateFrameIDs.back();
-		Frame* fr = &preloadFrames[ lastFrameId ];
-
-		fr->pixelData = (uint8_t*)malloc(size);
-		if (fr->pixelData == nullptr) {
-			// 메모리 할당 실패
-			SDL_assert(false);
-			LeaveCriticalSection(&cs);
-			continue;
-		}
-		if (not v->readFrame(nextFrameId, fr->pixelData)) {
-			// 읽기 실패
-			SDL_assert(false);
-			LeaveCriticalSection(&cs);
-			continue;
-		}
-		fr->index = nextFrameId;
-
-		void* pixels = nullptr;
-		int pitch = 0;
-		if (SDL_LockTexture(fr->texture, nullptr, &pixels, &pitch) == 0) {
-			memcpy(pixels, fr->pixelData, size);
-		}
-		SDL_UnlockTexture(fr->texture);
-		free(fr->pixelData);
-		fr->pixelData = nullptr;
-		neededUpdateFrameIDs.pop_back();
-
-		LeaveCriticalSection(&cs);
-
-		// 무한 루프라 대기를 넣어줘야 CPU 과부하 피할 수 있음
-		Sleep(10);
-	}
 }
 
 void Update(double delta) {
@@ -181,37 +138,19 @@ void Update(double delta) {
 
 	// TODO: 현재 그릴 프레임의 텍스처를 가져온다. 미리 로드한 프레임 배열에서 탐색. 
 
-	// TODO: Preloads - 벡터로 만들것 
-	Frame* fr = nullptr;
-	int preloadFrameIndex = 0;
-	for (int i = 0; i < MAX_PRELOAD_FRAME_COUNT; ++i) {
-		if (preloadFrames[ i ].index == currentFrameId) {
-			fr = &preloadFrames[ i ];
-			preloadFrameIndex = i;
-			break;
-		}
-	}
-
-	if (fr == nullptr) {
-		// TODO: 만약 미리 로드된 리스트에 존재하지 않으면 그리지 않고 넘어간다. 
-		//std::cout << "UpdateMovie Skip this frame, there is no frame to render [ FrameID: " << currentFrameId << " ]\n";
-		neededUpdateFrameIDs.push_back(0);
-		LeaveCriticalSection(&cs);
-		return;
-	}
+	// TODO: 가져온 프레임의 픽셀 데이터로 텍스처를 업데이트
 
 	// TODO: 실제 그리기 수행
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 	SDL_RenderClear(renderer);
+
+	// TODO: 디버깅 용으로 화면에 (전체 프리로드 / 현재 사용중인 프리로드) 형식으로 보여주기
+
 	SDL_Rect rect = { 0 }; rect.x = 0, rect.y = 0, rect.w = v.header().width, rect.h = v.header().height;
 	SDL_RenderCopy(renderer, fr->texture, nullptr, &rect);
 	SDL_RenderPresent(renderer);
 
 	lastDrawFrameID = currentFrameId;
-
-	// TODO: 현재 사용한 프레임이 사용되었음을 설정
-	neededUpdateFrameIDs.push_back(preloadFrameIndex);
-	LeaveCriticalSection(&cs);
 }
 
 int main(int argc, char** argv) {
@@ -220,6 +159,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
 	if (not v.readVideoFromFile("resources/videos/castle.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
@@ -228,28 +168,14 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	else {
-		// 미리 로드 시작
+		// 미리 로드 시작 - 단 하나의 텍스처만 생성하고 이를 그릴 때 픽셀데이터로 업데이트하는 것으로 한다 
 		int count = MAX_PRELOAD_FRAME_COUNT > v.header().frameCount ? v.header().frameCount : MAX_PRELOAD_FRAME_COUNT;
 
 		printf("Preloading started - %d \n", count);
-		for (int i = 0; i < count; ++i) {
-			Frame* fr = &preloadFrames[ i ];
-			fr->index = i;
 
-			int size = ((v.header().width * 3 + 3) & ~3) * v.header().height;
-			uint8_t* data = (uint8_t*)malloc(size);
-			if (not v.readFrame(i, data)) {
-				// 프레임 읽기 실패
-				std::cout << "Failed to readFrame of video! [ FrameID: " << i << " ]\n";
-				ExitProgram();
-				return 1;
-			}
-			// TODO: 텍스처를 하나만 생성해도 된다
-			fr->texture = CreateTextureFromPixel(renderer, v.header().width, v.header().height, data);
+		// TODO: preloads 픽셀 데이터 읽어오기
 
-			// 임시로 텍스처 데이터 삭제하지 않도록 함
-			free(data);
-		}
+		// TODO: Video 내 단 하나의 텍스처만 생성하기
 		printf("Preloading ended - %d \n", count);
 	}
 

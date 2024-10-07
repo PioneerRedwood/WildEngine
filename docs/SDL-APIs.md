@@ -31,3 +31,10 @@ SDL의 SDL_RenderDrawLine() 같은 렌더링 함수는 백버퍼에 수행하므
 - [SDL_RenderRect](https://wiki.libsdl.org/SDL2/SDL_RenderDrawRect): 현재 렌더링 타겟에 사각형을 그린다. 여러 사각형을 그리기 원하면 SDL_RenderRects를 사용하라. 
 - [SDL_RenderFillRect](https://wiki.libsdl.org/SDL2/SDL_RenderFillRect): 현재 렌더링 타겟에 지정한 그리기 색상으로 사각형을 채운다. 여러 사각형을 채우기 원하면 SDL_RenderFillRects를 사용하라. 
 - [SDL_RenderCopy](https://wiki.libsdl.org/SDL2/SDL_RenderCopy): 현재 렌더링 타겟에 텍스처의 일부분을 복사한다.
+
+## 텍스처 접근 모드
+- `SDL_TEXTUREACCESS_STATIC` vs. `SDL_TEXTUREACCESS_STREAMING`의 차이점: 
+스태틱은 락이 요구되어 느림. 스트리밍은 쉐어드 메모리 개념이므로 락이 요구되지 않아 변경이 자주 발생하면 상대적으로 빠름. 이 락은 드라이버 레벨의 락임. 
+
+- XBox, PlayStation 등의 콘솔의 구조는 일반적인 PC의 구조와 다름. 그래픽 렌더링에 최적화된 메모리 액세스와 CPU - GPU 간 대역폭 최소화한다. 
+
