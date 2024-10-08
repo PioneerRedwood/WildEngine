@@ -225,8 +225,11 @@ typedef struct {
 	uint32_t fps;
 } VideoHeader;
 
-#define OUTFILE "../resources/videos/castle.mv"
-#define IN_DIR "../resources/test/castle/"
+//#define OUTFILE "../resources/videos/castle.mv"
+//#define IN_DIR "../resources/test/castle/"
+
+#define OUTFILE "../resources/videos/american-town.mv"
+#define IN_DIR "../resources/test/american-town/"
 
 //#define OUTFILE "../resources/videos/dresden.mv"
 //#define IN_DIR "../resources/dresden/"

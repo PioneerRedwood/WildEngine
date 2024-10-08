@@ -3,18 +3,17 @@
 #include <cstdint>  // uint family
 #include <SDL.h>    // SDL_Texture*
 
-typedef struct {
+struct Frame{
   uint32_t index;
-  SDL_Texture* texture;
   uint8_t* pixelData;
-} Frame;
+};
 
-typedef struct {
+struct VideoHeader {
   uint32_t frameCount;
   uint32_t width;
   uint32_t height;
   uint32_t fps;
-} VideoHeader;
+};
 
 class Video {
 public:
@@ -36,7 +35,7 @@ public:
 
   bool readFrame(uint32_t frameId, uint8_t* out);
 
-  uint64_t startTime() {
+  uint64_t startTime() const {
     return m_startTime;
   }
 
@@ -44,6 +43,10 @@ public:
     if (m_startTime == 0) {
       m_startTime = time;
     }
+  }
+
+  int stride() const {
+    return m_stride;
   }
 
 private:
@@ -56,4 +59,6 @@ private:
   float m_indexUnit = { 0.0f };
 
   uint64_t m_startTime = { 0 };
+
+  int m_stride = {};
 };
