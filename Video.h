@@ -49,6 +49,10 @@ public:
     return m_stride;
   }
 
+  int frameSize() const {
+    return m_stride * m_header.height;
+  }
+
 private:
   VideoHeader m_header = { 0 };
 
