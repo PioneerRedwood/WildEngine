@@ -1,6 +1,10 @@
 ﻿#include "Video.h"
 #include <stdio.h>
 
+namespace {
+	constexpr auto BytesPerPixel = 3; // RGB Pixel bytes;
+}
+
 Video::~Video() {
 	if (m_framePixelOffsets != nullptr) {
 		free(m_framePixelOffsets);
@@ -45,8 +49,10 @@ bool Video::readVideoFromFile(const char* path) {
 	}
 
 	// 프레임 크기
+	m_rowSize = m_header.width * BytesPerPixel;
 	m_stride = ((m_header.width * 3 + 3) & ~3);
-	uint64_t frameSize = (uint64_t)(m_stride * m_header.height);
+	//int padding = m_stride - m_rowSize;
+	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
 	for (uint64_t i = 0; i < m_header.frameCount; ++i) {
 		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
 	}
@@ -76,7 +82,7 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
 	fseek(m_fp, (long)offset, SEEK_SET);
-	uint64_t frameSize = (uint64_t)(m_stride * m_header.height);
+	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
 	fread(out, frameSize, 1, m_fp);
 
 	return true;

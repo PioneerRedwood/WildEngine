@@ -193,7 +193,14 @@ void Update(double delta) {
 		int pitch = {};
 		int updateResult = SDL_LockTexture(sdlTexture, nullptr, &pixelData, &pitch);
 		if (updateResult == 0 && found.pixelData != nullptr) {
-			memcpy(pixelData, found.pixelData, (size_t)pitch * v.header().height);
+			int expectedPitch = v.rowSize();
+			if (expectedPitch != pitch) {
+				std::cout << "SDL_LockTexture pitch is different from expecting \n";
+			}
+			//memcpy(pixelData, found.pixelData, (size_t)pitch * v.header().height);
+			// TODO: 피치는 패딩이 포함된 로우고 v.rowSize()는 그렇지 않음.. 논리적으로 되게 하려면.. 
+			// 여기서 복사할때 트릭이 있어야 하지 않을까
+			memcpy(pixelData, found.pixelData, v.rowSize() * v.header().height);
 		}
 		else {
 			std::cout << "SDL_LockTexture failed error: " << SDL_GetError() << std::endl;
@@ -246,10 +253,10 @@ int main(int argc, char** argv) {
 	}
 
 	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
-	//if (not v.readVideoFromFile("resources/videos/castle.mv")) {
-	if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
+	if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
-		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
@@ -277,6 +284,7 @@ int main(int argc, char** argv) {
 	sdlTexture = SDL_CreateTexture(renderer,
 		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
 		v.header().width, v.header().height);
+		//v.rowSize(), v.header().height);
 
 	printf("Preloading ended - %d \n", count);
 

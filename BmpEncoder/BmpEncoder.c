@@ -68,8 +68,24 @@ typedef enum {
 	ALLOCATION_FAILED = 3,
 } LoadResult;
 
-// 상하반전을 위한 임시 픽셀 데이터 포인터
-uint8_t* tempMemory = NULL;
+
+// 새로운 구조의 BitmapMovie 선언
+// 입력: 1, 2, 3, ... n.bmp 디렉토리 경로. 
+// 출력: videos/아래에 새로운 Video 파일 쓰기. 
+// 시나리오: 비트맵을 읽을 수 없을 때까지 계속 로드, 동시에 픽셀데이터를 파일에 저장. 
+// 마지막 프레임을 저장하고 난 뒤 헤더 작성. 헤더에는 프레임 수, 프레임 크기, 초당 프레임 수
+
+typedef struct {
+	uint32_t frameCount;
+	uint32_t width;
+	uint32_t height;
+	uint32_t fps;
+} VideoHeader;
+
+uint8_t* pixelData = NULL;
+bool isFirstLoading = true;
+int realPixelSize = 0, rowSize = 0;
+VideoHeader header = { 0 };
 
 int LoadBitmap(bitmap* bmp, const char* path) {
 	// TODO: 파일 읽기 형식으로 열기
@@ -91,6 +107,7 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 	fseek(fp, bmp->header_info.pixel_start_offset, SEEK_SET);
 
 	int stride = ((bmp->header.width * 3 + 3) & ~3);
+#if 0
 	int size = stride * bmp->header.height;
 
 	// TODO: 읽은 픽셀 데이터 상하 반전 위한 메모리 할당
@@ -116,6 +133,35 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 			tempMemory + ((bmp->header.height - 1 - y) * stride),
 			stride);
 	}
+#else
+	int bbp = bmp->header.bits_per_pixel / 8;
+	rowSize = bmp->header.width * bbp;
+	int padding = stride - rowSize;
+
+	if (isFirstLoading) {
+		rowSize = bmp->header.width * (bmp->header.bits_per_pixel / 8);
+		realPixelSize = rowSize * bmp->header.height;
+
+		pixelData = (uint8_t*)malloc(realPixelSize);
+		header.width = bmp->header.width;
+		header.height = bmp->header.height;
+		isFirstLoading = false;
+	}
+
+	if (pixelData == NULL) {
+		printf("LoadBitmap - Allocating PixelData failed \n");
+		return ALLOCATION_FAILED;
+	}
+
+	// TODO: 읽은 픽셀 데이터 상하 반전 위해 메모리 반대로 할당
+	unsigned long offset = 0;
+	for (int y = bmp->header.height - 1; y >= 0; --y) {
+		offset = y * rowSize;
+		fread(pixelData + offset, rowSize, 1, fp);
+		fseek(fp, padding, SEEK_CUR);
+	}
+
+#endif
 
 	fclose(fp);
 
@@ -211,24 +257,11 @@ int main(int argc, char** argv)
 
 #else
 
-// 새로운 구조의 BitmapMovie 선언
-// 입력: 1, 2, 3, ... n.bmp 디렉토리 경로. 
-// 출력: videos/아래에 새로운 Video 파일 쓰기. 
-// 시나리오: 비트맵을 읽을 수 없을 때까지 계속 로드, 동시에 픽셀데이터를 파일에 저장. 
-// 마지막 프레임을 저장하고 난 뒤 헤더 작성. 헤더에는 프레임 수, 프레임 크기, 초당 프레임 수, 프레임 별 픽셀 오프셋 저장
-// 사실상 프레임의 픽셀 데이터 오프셋은 
-
-typedef struct {
-	uint32_t frameCount;
-	uint32_t width;
-	uint32_t height;
-	uint32_t fps;
-} VideoHeader;
-
 //#define OUTFILE "../resources/videos/castle.mv"
 //#define IN_DIR "../resources/test/castle/"
 
-#define OUTFILE "../resources/videos/american-town.mv"
+//#define OUTFILE "../resources/videos/american-town.mv"
+#define OUTFILE "../resources/videos/american-town3.mv"
 #define IN_DIR "../resources/test/american-town/"
 
 //#define OUTFILE "../resources/videos/dresden.mv"
@@ -237,14 +270,17 @@ typedef struct {
 //#define OUTFILE "../resources/videos/medium.mv"
 //#define IN_DIR "../resources/medium/"
 
+//#define OUTFILE "../resources/videos/small.mv"
+//#define IN_DIR "../resources/small/"
+
 #define FPS 12
 
 int main(int argc, char** argv) {
 	FILE* fp = fopen(OUTFILE, "wb");
 	if(fp == NULL) { printf("Cannot open file %s \n", OUTFILE); return 1; }
 
-	VideoHeader header = { 0 };
 	int i = 1;
+
 	while(true) {
 		char filepathBuf[256];
 		snprintf(filepathBuf, 256, "%s%d.bmp", IN_DIR, i);
@@ -252,20 +288,17 @@ int main(int argc, char** argv) {
 		bitmap bmp = { 0 };
 		if(LoadBitmap(&bmp, filepathBuf) == 0) {
 			// success
-			int stride = ((bmp.header.width * 3 + 3) & ~3);
-			int size = stride * bmp.header.height;
-			fwrite(bmp.pixel_data, size, 1, fp); // 패딩 필요 없음
-			free(bmp.pixel_data); // 자원낭비
+			fwrite(pixelData, realPixelSize, 1, fp);
 			header.frameCount++;
-			header.width = bmp.header.width;
-			header.height = bmp.header.height;
 		} else {
 			// failure
-			free(tempMemory);
 			break;
 		}
 
 		++i;
+	}
+	if (pixelData != NULL) {
+		free(pixelData);
 	}
 
 	// 헤더 파일에 쓰기

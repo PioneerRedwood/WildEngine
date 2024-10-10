@@ -53,6 +53,10 @@ public:
     return m_stride * m_header.height;
   }
 
+  int rowSize() const {
+    return m_rowSize;
+  }
+
 private:
   VideoHeader m_header = { 0 };
 
@@ -65,4 +69,6 @@ private:
   uint64_t m_startTime = { 0 };
 
   int m_stride = {};
+
+  int m_rowSize = {};
 };
