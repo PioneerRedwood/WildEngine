@@ -170,102 +170,15 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 	return SUCCESS;
 }
 
-#if 0
-#define BUF_SIZE 255
-
-//#define BMP_PREFIX "../resources/test/ironman/"
-//#define OUTFILE "../resources/bms/ironman.bm"
-//#define BMP_PREFIX "../resources/small/"
-//#define OUTFILE "../resources/bms/small.bm"
-//#define BMP_PREFIX "../resources/random/"
-//#define OUTFILE "../resources/bms/random.bm"
-//#define BMP_PREFIX "../resources/dresden/"
-//#define OUTFILE "../resources/bms/dresden.bm"
-#define BMP_PREFIX "../resources/castle/"
-#define OUTFILE "../resources/bms/castle.bm"
-
-#define FPS 12
-
-// 헤더가 꼭 앞에 있을 필요는 없음 - 발상의 전환
-// 한 프레임씩 저장 
-// 메모리 많이 쓰지 말기
-
-int main(int argc, char** argv)
-{
-	// 출력 파일 포인터 생성
-	FILE* fp = fopen(OUTFILE, "wb");
-	if (fp == NULL) {
-		printf("파일을 쓰기 형식으로 열 수 없습니다. \n");
-		return 1;
-	}
-
-	movie mv = { 0 };
-	
-	int num_frames = 0;
-	while(true) {
-		char filepath[BUF_SIZE];
-		snprintf(filepath, BUF_SIZE, "%s%d.bmp", BMP_PREFIX, num_frames + 1);
-
-		bitmap bmp = { 0 };
-		LoadResult result = LoadBitmap(&bmp, filepath);
-
-		if (result != 0) {
-			printf("비트맵 로드에 실패했습니다 [ ID: %d 파일: %s ] \n", num_frames, filepath);
-			break;
-		}
-		else {
-			// 현재 프레임에 대한 정보를 먼저 저장
-			frame fr = { 0 };
-			fr.header.pixel_data_offset = mv.header.size + sizeof(frame_header);
-			fr.header.index = mv.header.total_frame_count;
-			fr.header.width = bmp.header.width;
-			fr.header.height = bmp.header.height;
-			fr.pixel_data = bmp.pixel_data;
-
-			// 성공 시 데이터 업데이트
-			int frame_stride = ((fr.header.width * 3 + 3) & ~3);
-			int num_pixel_bytes = (frame_stride * fr.header.height);
-			mv.header.size += (sizeof(frame_header) + num_pixel_bytes);
-
-			printf("비트맵 로드 성공 [ ID: %d 파일: %s 쌓은 크기: %llu ] \n", num_frames, filepath, mv.header.size);
-
-			mv.header.total_frame_count++;
-
-			// 프레임 정보 저장
-			fwrite(&fr.header, sizeof(frame_header), 1, fp);
-			fwrite(fr.pixel_data, num_pixel_bytes, 1, fp);
-
-			free(bmp.pixel_data);
-		}
-
-		num_frames++;
-	}
-
-	// 파일 크기, 프레임 수, 초 당 프레임
-	mv.header.size += sizeof(movie_header);
-	mv.header.fps = FPS;
-
-	// 파일 헤더 쓰기
-	fwrite(&mv.header, sizeof(movie_header), 1, fp);
-
-	fclose(fp);
-
-	printf("bm 파일 쓰기 성공 [ 파일: %s 쌓은 크기: %llu ] \n", OUTFILE, mv.header.size);
-
-	return 0;
-}
-
-#else
-
 //#define OUTFILE "../resources/videos/castle.mv"
 //#define IN_DIR "../resources/test/castle/"
 
 //#define OUTFILE "../resources/videos/american-town.mv"
-#define OUTFILE "../resources/videos/american-town3.mv"
-#define IN_DIR "../resources/test/american-town/"
+//#define OUTFILE "../resources/videos/american-town3.mv"
+//#define IN_DIR "../resources/test/american-town/"
 
-//#define OUTFILE "../resources/videos/dresden.mv"
-//#define IN_DIR "../resources/dresden/"
+#define OUTFILE "../resources/videos/dresden.mv"
+#define IN_DIR "../resources/dresden/"
 
 //#define OUTFILE "../resources/videos/medium.mv"
 //#define IN_DIR "../resources/medium/"
@@ -308,5 +221,3 @@ int main(int argc, char** argv) {
 	fclose(fp);
 	return 0;
 }
-
-#endif

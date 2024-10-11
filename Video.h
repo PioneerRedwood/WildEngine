@@ -39,21 +39,11 @@ public:
     return m_startTime;
   }
 
-  void startTime(uint64_t time) {
-    if (m_startTime == 0) {
-      m_startTime = time;
-    }
-  }
+  void startTime(uint64_t time);
 
-  int stride() const {
-    return m_stride;
-  }
+  int frameSize() const;
 
-  int frameSize() const {
-    return m_stride * m_header.height;
-  }
-
-  int rowSize() const {
+  std::size_t rowSize() const {
     return m_rowSize;
   }
 
@@ -69,6 +59,8 @@ private:
   uint64_t m_startTime = { 0 };
 
   int m_stride = {};
+
+  uint8_t* m_tempPixelDataHolder = {};
 
   int m_rowSize = {};
 };

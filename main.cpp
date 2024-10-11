@@ -2,9 +2,7 @@
 
 #include <iostream>
 #include <memory>
-#include <vector>
 #include <list>
-#include <deque>
 
 #include <process.h> // _beginThread
 #include <windows.h>
@@ -12,7 +10,7 @@
 
 #include "Video.h"
 
-#define MAX_PRELOAD_FRAME_COUNT 32
+constexpr auto MAX_PRELOAD_FRAME_COUNT = 16;
 
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
@@ -31,8 +29,9 @@ uint64_t videoStartTime = {};
 
 // 생산자 스레드에서는 이 프리로드된 프레임을 생성
 // 사용자 스레드에서는 이 프리로드된 프레임을 사용/제거
-std::deque<Frame> loadedFrames = {};
+std::list<Frame> loadedFrames = {};
 std::size_t lastDrawFrameID = {};
+SDL_Point* points = {};
 CRITICAL_SECTION cs;
 
 // Debug
@@ -69,7 +68,6 @@ namespace debug {
 		SDL_RenderDrawRect(renderer, &indicatorRect);
 	}
 }
-
 
 bool InitProgram(int width, int height) {
 	// SDL 초기화
@@ -147,6 +145,8 @@ void LoadFrameThread(void* arg) {
 	}
 }
 
+#define USE_SDL_POINT true
+
 void Update(double delta) {
 	if (videoStartTime == 0) { videoStartTime = SDL_GetPerformanceCounter(); }
 
@@ -188,19 +188,22 @@ void Update(double delta) {
 	}
 
 	// TODO: 가져온 프레임의 픽셀 데이터로 텍스처를 업데이트
+#if USE_SDL_TEXTURE
 	{
 		void* pixelData = {};
 		int pitch = {};
 		int updateResult = SDL_LockTexture(sdlTexture, nullptr, &pixelData, &pitch);
 		if (updateResult == 0 && found.pixelData != nullptr) {
-			int expectedPitch = v.rowSize();
-			if (expectedPitch != pitch) {
-				std::cout << "SDL_LockTexture pitch is different from expecting \n";
-			}
-			//memcpy(pixelData, found.pixelData, (size_t)pitch * v.header().height);
+			//int expected = v.rowSize();
+			//if (expected != pitch) {
+			//	std::cout << "SDL_LockTexture pitch is different from expecting [ expected: " << expected << " real: " << pitch << " ]\n";
+			//}
 			// TODO: 피치는 패딩이 포함된 로우고 v.rowSize()는 그렇지 않음.. 논리적으로 되게 하려면.. 
 			// 여기서 복사할때 트릭이 있어야 하지 않을까
-			memcpy(pixelData, found.pixelData, v.rowSize() * v.header().height);
+
+			// 통째로 복사하면 패딩에 의해서 이미지가 휘어진 것처럼 렌더됨 
+			// - SDL_LockTexture을 통해 가져온 픽셀 데이터는 패딩이 존재하여 4바이트 정렬되어있기 때문. 
+			memcpy(pixelData, found.pixelData, (size_t)pitch * v.header().height);
 		}
 		else {
 			std::cout << "SDL_LockTexture failed error: " << SDL_GetError() << std::endl;
@@ -210,12 +213,6 @@ void Update(double delta) {
 
 	// TODO: 가져온 픽셀 데이터를 로드한 프레임 배열에서 삭제
 	{
-		std::cout << "Before [ ";
-		for (auto& f : loadedFrames) {
-			std::cout << f.index << " ";
-		}
-		std::cout << "] current: " << currentFrameID << " indexOfPreloads: " << indexOfPreloads << std::endl;
-
 		// 단순 알고리즘 1: indexOfPreloads 이하에 있는 것들은 모두 지워버리기. 
 		{
 			for (int i = 0; i < indexOfPreloads; ++i) {
@@ -224,12 +221,6 @@ void Update(double delta) {
 				loadedFrames.pop_front();
 			}
 		}
-
-		std::cout << "After [ ";
-		for (auto& f : loadedFrames) {
-			std::cout << f.index << " ";
-		}
-		std::cout << "] current: " << currentFrameID << " indexOfPreloads: " << indexOfPreloads << std::endl;
 	}
 	LeaveCriticalSection(&cs);
 
@@ -244,6 +235,43 @@ void Update(double delta) {
 
 	SDL_RenderPresent(renderer);
 	lastDrawFrameID = currentFrameID;
+#elif USE_SDL_POINT // Use drawPoint
+
+	// TODO: 가져온 픽셀 데이터를 로드한 프레임 배열에서 삭제
+	// 단순 알고리즘 1: indexOfPreloads 이하에 있는 것들은 모두 지워버리기. 
+	for (int i = 0; i < indexOfPreloads; ++i) {
+		auto& info = loadedFrames.front();
+		free(info.pixelData);
+		loadedFrames.pop_front();
+	}
+	LeaveCriticalSection(&cs);
+
+	// 각 픽셀 데이터에 대한 RGB 정보를 포인트에 저장하고 점찍기 수행
+	// 점이 이상하게 찍힘
+	for (int y = 0; y < v.header().height; ++y) {
+		for (int x = 0; x < v.rowSize(); ++x) {
+			int offset = y * v.rowSize() + x;
+			Uint8 rgb[ 3 ] = {
+				found.pixelData[ offset + 2 ], found.pixelData[ offset + 1 ], found.pixelData[ offset + 0 ]
+			};
+			// 칼라 설정
+			SDL_SetRenderDrawColor(renderer, rgb[0], rgb[1], rgb[2], 255);
+			// 렌더 포인트
+			SDL_RenderDrawPoint(renderer, x, y);
+			std::cout << "Draw Point (" << x << ", " << y << ") RGB: "
+				<< (int)rgb[0] << " " << (int)rgb[1] << " " << (int)rgb[2] << std::endl;
+		}
+	}
+
+	// 렌더
+	SDL_RenderPresent(renderer);
+	lastDrawFrameID = currentFrameID;
+#else
+	// Nothing to draw
+	LeaveCriticalSection(&cs);
+	return;
+#endif
+
 }
 
 int main(int argc, char** argv) {
@@ -254,9 +282,10 @@ int main(int argc, char** argv) {
 
 	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
 	//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
-	if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
+	if (not v.readVideoFromFile("resources/videos/small.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
@@ -284,7 +313,10 @@ int main(int argc, char** argv) {
 	sdlTexture = SDL_CreateTexture(renderer,
 		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
 		v.header().width, v.header().height);
-		//v.rowSize(), v.header().height);
+
+#ifdef USE_SDL_POINT
+	points = (SDL_Point*)malloc(v.frameSize());
+#endif
 
 	printf("Preloading ended - %d \n", count);
 

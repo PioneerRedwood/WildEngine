@@ -1,14 +1,30 @@
 ﻿#include "Video.h"
 #include <stdio.h>
+#include <memory>
+#include <iostream>
 
 namespace {
-	constexpr auto BytesPerPixel = 3; // RGB Pixel bytes;
+	constexpr auto BitsPerPixel = 3; // RGB Pixel bytes;
 }
 
 Video::~Video() {
 	if (m_framePixelOffsets != nullptr) {
 		free(m_framePixelOffsets);
 	}
+	if (m_tempPixelDataHolder != nullptr) {
+		free(m_tempPixelDataHolder);
+	}
+}
+
+void Video::startTime(uint64_t time) {
+  if (m_startTime == 0) {
+    m_startTime = time;
+  }
+}
+
+int Video::frameSize() const {
+  return m_stride * m_header.height;
+  //return m_rowSize * m_header.height;
 }
 
 /// <summary>
@@ -28,6 +44,7 @@ int Video::getCurrentFrameIDByElapsed(double elapsed) const {
 /// <param name="path">입력 파일 경로</param>
 /// <returns>성공 시 true, 그렇지 않으면 false</returns>
 bool Video::readVideoFromFile(const char* path) {
+	std::cout << "Video::readVideoFromFile started filepath:" << path << std::endl;
 	// 파일 포인터 생성
 	errno_t err = fopen_s(&m_fp, path, "rb");
 	if (err != 0) {
@@ -45,21 +62,25 @@ bool Video::readVideoFromFile(const char* path) {
 	m_framePixelOffsets = (uint64_t*)malloc(sizeof(uint64_t) * m_header.frameCount);
 	if (m_framePixelOffsets == nullptr) {
 		// 프레임 픽셀 오프셋 저장할 메모리 할당 실패
+		std::cout << "Video::readVideoFromFile failed allocation filepath:" << path << std::endl;
 		return false;
 	}
 
 	// 프레임 크기
-	m_rowSize = m_header.width * BytesPerPixel;
-	m_stride = ((m_header.width * 3 + 3) & ~3);
-	//int padding = m_stride - m_rowSize;
+	m_rowSize = (std::size_t)m_header.width * BitsPerPixel;
+	m_stride = ((m_header.width * BitsPerPixel + 3) & ~3);
 	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
 	for (uint64_t i = 0; i < m_header.frameCount; ++i) {
 		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
 	}
 
+	m_tempPixelDataHolder = (uint8_t*)malloc(frameSize);
+
 	//m_indexUnit = (float)1 / 1000; // 느리게
 	//m_indexUnit = (float)0.1 / 1000; // 많이 느리게
 	m_indexUnit = (float)m_header.fps / 1000;
+
+	std::cout << "Video::readVideoFromFile finished filepath:" << path << std::endl;
 
 	// 성공 시 true 반환
 	return true;
@@ -77,13 +98,18 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 		return false;
 	}
 
-	uint64_t offset = m_framePixelOffsets[ frameId ];
-
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
-	fseek(m_fp, (long)offset, SEEK_SET);
+	fseek(m_fp, (long)m_framePixelOffsets[ frameId ], SEEK_SET);
 	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
-	fread(out, frameSize, 1, m_fp);
+	fread(m_tempPixelDataHolder, frameSize, 1, m_fp);
+	
+	// 패딩을 포함한 픽셀데이터로 메모리 복사
+	for (int h = 0; h < m_header.height; ++h) {
+		// 패딩 추가해서 메모리 복사
+		auto offset = out + h * m_stride;
+		memcpy(offset, m_tempPixelDataHolder + h * m_rowSize, m_rowSize);
+	}
 
 	return true;
 }
