@@ -177,14 +177,14 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 //#define OUTFILE "../resources/videos/american-town3.mv"
 //#define IN_DIR "../resources/test/american-town/"
 
-#define OUTFILE "../resources/videos/dresden.mv"
-#define IN_DIR "../resources/dresden/"
+//#define OUTFILE "../resources/videos/dresden.mv"
+//#define IN_DIR "../resources/dresden/"
 
 //#define OUTFILE "../resources/videos/medium.mv"
 //#define IN_DIR "../resources/medium/"
 
-//#define OUTFILE "../resources/videos/small.mv"
-//#define IN_DIR "../resources/small/"
+#define OUTFILE "../resources/videos/small.mv"
+#define IN_DIR "../resources/small/"
 
 #define FPS 12
 

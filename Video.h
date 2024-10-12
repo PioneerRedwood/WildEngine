@@ -43,7 +43,7 @@ public:
 
   int frameSize() const;
 
-  std::size_t rowSize() const {
+  int rowSize() const {
     return m_rowSize;
   }
 

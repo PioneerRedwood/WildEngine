@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <list>
+#include <iomanip>
 
 #include <process.h> // _beginThread
 #include <windows.h>
@@ -10,6 +11,8 @@
 
 #include "Video.h"
 
+
+// #define vs. constexpr auto?
 constexpr auto MAX_PRELOAD_FRAME_COUNT = 16;
 
 SDL_Window* window = nullptr;
@@ -91,6 +94,10 @@ bool InitProgram(int width, int height) {
 void ExitProgram() {
 	std::cout << "Program exit \n";
 
+	if (points != nullptr) {
+		free(points);
+	}
+
 	// 윈도우/렌더러 파괴
 	SDL_DestroyWindow(window);
 	SDL_DestroyRenderer(renderer);
@@ -102,6 +109,7 @@ void ExitProgram() {
 // 생산자 스레드. 
 void LoadFrameThread(void* arg) {
 	Video* v = (Video*)arg;
+	const int maxFrameCount = MAX_PRELOAD_FRAME_COUNT > v->header().frameCount ? v->header().frameCount : MAX_PRELOAD_FRAME_COUNT;
 
 	while (true) {
 
@@ -113,7 +121,7 @@ void LoadFrameThread(void* arg) {
 			nextPreloadFrameID = (loadedFrames.back().index + 1) % (v->header().frameCount);
 		}
 
-		if (loadedFrames.size() >= MAX_PRELOAD_FRAME_COUNT) {
+		if (loadedFrames.size() >= maxFrameCount) {
 			LeaveCriticalSection(&cs);
 			Sleep(10);
 			continue;
@@ -145,8 +153,6 @@ void LoadFrameThread(void* arg) {
 	}
 }
 
-#define USE_SDL_POINT true
-
 void Update(double delta) {
 	if (videoStartTime == 0) { videoStartTime = SDL_GetPerformanceCounter(); }
 
@@ -162,10 +168,9 @@ void Update(double delta) {
 		return;
 	}
 
-	EnterCriticalSection(&cs);
-
 	// TODO: 현재 그릴 프레임의 텍스처를 가져온다. 미리 로드한 프레임 배열에서 탐색. 
 	int indexOfPreloads = -1;
+	EnterCriticalSection(&cs);
 	Frame found = {};
 	found.index = -1;
 	for (auto& i : loadedFrames) {
@@ -186,9 +191,10 @@ void Update(double delta) {
 		LeaveCriticalSection(&cs);
 		return;
 	}
+	LeaveCriticalSection(&cs);
 
 	// TODO: 가져온 프레임의 픽셀 데이터로 텍스처를 업데이트
-#if USE_SDL_TEXTURE
+#if 0
 	{
 		void* pixelData = {};
 		int pitch = {};
@@ -212,15 +218,12 @@ void Update(double delta) {
 	}
 
 	// TODO: 가져온 픽셀 데이터를 로드한 프레임 배열에서 삭제
-	{
-		// 단순 알고리즘 1: indexOfPreloads 이하에 있는 것들은 모두 지워버리기. 
-		{
-			for (int i = 0; i < indexOfPreloads; ++i) {
-				auto& info = loadedFrames.front();
-				free(info.pixelData);
-				loadedFrames.pop_front();
-			}
-		}
+	// 단순 알고리즘 1: indexOfPreloads 이하에 있는 것들은 모두 지워버리기. 
+	EnterCriticalSection(&cs);
+	for (int i = 0; i < indexOfPreloads; ++i) {
+		auto& info = loadedFrames.front();
+		free(info.pixelData);
+		loadedFrames.pop_front();
 	}
 	LeaveCriticalSection(&cs);
 
@@ -229,16 +232,15 @@ void Update(double delta) {
 	SDL_RenderClear(renderer);
 	SDL_Rect rect = { 0 }; rect.x = 0, rect.y = 0, rect.w = v.header().width, rect.h = v.header().height;
 	SDL_RenderCopy(renderer, sdlTexture, nullptr, &rect);
+#else // Use drawPoint
 
-	// TODO: 디버깅 용으로 화면에 (전체 프리로드 / 현재 사용중인 프리로드) 형식으로 보여주기
-	debug::DrawUsingFrameStatus(indexOfPreloads);
-
-	SDL_RenderPresent(renderer);
-	lastDrawFrameID = currentFrameID;
-#elif USE_SDL_POINT // Use drawPoint
+	if (points == nullptr) {
+		points = (SDL_Point*)malloc(v.frameSize());
+	}
 
 	// TODO: 가져온 픽셀 데이터를 로드한 프레임 배열에서 삭제
 	// 단순 알고리즘 1: indexOfPreloads 이하에 있는 것들은 모두 지워버리기. 
+	EnterCriticalSection(&cs);
 	for (int i = 0; i < indexOfPreloads; ++i) {
 		auto& info = loadedFrames.front();
 		free(info.pixelData);
@@ -247,31 +249,29 @@ void Update(double delta) {
 	LeaveCriticalSection(&cs);
 
 	// 각 픽셀 데이터에 대한 RGB 정보를 포인트에 저장하고 점찍기 수행
-	// 점이 이상하게 찍힘
-	for (int y = 0; y < v.header().height; ++y) {
-		for (int x = 0; x < v.rowSize(); ++x) {
-			int offset = y * v.rowSize() + x;
+	for (auto y = 0; y < v.header().height; ++y) {
+		//std::cout << y << ": ";
+		for (auto x = 0; x < v.header().width; ++x) {
+			int rowOffset = y * v.rowSize() + (x * 3);
 			Uint8 rgb[ 3 ] = {
-				found.pixelData[ offset + 2 ], found.pixelData[ offset + 1 ], found.pixelData[ offset + 0 ]
+				found.pixelData[ rowOffset + 2 ], found.pixelData[ rowOffset + 1 ], found.pixelData[ rowOffset + 0 ]
 			};
-			// 칼라 설정
+			//std::cout << std::hex 
+			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 0 ]) << " "
+			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 1 ]) << " "
+			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 2 ]) << " " << std::dec;
 			SDL_SetRenderDrawColor(renderer, rgb[0], rgb[1], rgb[2], 255);
-			// 렌더 포인트
 			SDL_RenderDrawPoint(renderer, x, y);
-			std::cout << "Draw Point (" << x << ", " << y << ") RGB: "
-				<< (int)rgb[0] << " " << (int)rgb[1] << " " << (int)rgb[2] << std::endl;
 		}
+		//std::cout << " \n";
 	}
+#endif
+	// TODO: 디버깅 용으로 화면에 (전체 프리로드 / 현재 사용중인 프리로드) 형식으로 보여주기
+	debug::DrawUsingFrameStatus(indexOfPreloads);
 
 	// 렌더
 	SDL_RenderPresent(renderer);
 	lastDrawFrameID = currentFrameID;
-#else
-	// Nothing to draw
-	LeaveCriticalSection(&cs);
-	return;
-#endif
-
 }
 
 int main(int argc, char** argv) {
@@ -281,11 +281,11 @@ int main(int argc, char** argv) {
 	}
 
 	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
-	//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
+	if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 	//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
-	if (not v.readVideoFromFile("resources/videos/small.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/small.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return 1;
@@ -313,10 +313,6 @@ int main(int argc, char** argv) {
 	sdlTexture = SDL_CreateTexture(renderer,
 		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
 		v.header().width, v.header().height);
-
-#ifdef USE_SDL_POINT
-	points = (SDL_Point*)malloc(v.frameSize());
-#endif
 
 	printf("Preloading ended - %d \n", count);
 

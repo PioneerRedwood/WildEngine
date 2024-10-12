@@ -74,7 +74,10 @@ bool Video::readVideoFromFile(const char* path) {
 		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
 	}
 
-	m_tempPixelDataHolder = (uint8_t*)malloc(frameSize);
+	// 패딩이 필요한 것이라면 임시 픽셀 데이터 홀더 생성
+	if (m_stride != m_rowSize) {
+		m_tempPixelDataHolder = (uint8_t*)malloc(frameSize);
+	}
 
 	//m_indexUnit = (float)1 / 1000; // 느리게
 	//m_indexUnit = (float)0.1 / 1000; // 많이 느리게
@@ -101,15 +104,20 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
 	fseek(m_fp, (long)m_framePixelOffsets[ frameId ], SEEK_SET);
-	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
-	fread(m_tempPixelDataHolder, frameSize, 1, m_fp);
-	
-	// 패딩을 포함한 픽셀데이터로 메모리 복사
-	for (int h = 0; h < m_header.height; ++h) {
-		// 패딩 추가해서 메모리 복사
-		auto offset = out + h * m_stride;
-		memcpy(offset, m_tempPixelDataHolder + h * m_rowSize, m_rowSize);
-	}
 
+	// 만약 4바이트 정렬이 아니면, 패딩을 추가한 메모리 할당
+	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
+
+	if (m_stride != m_rowSize) {
+		fread(m_tempPixelDataHolder, frameSize, 1, m_fp);
+		for (uint32_t h = 0; h < m_header.height; ++h) {
+			void* offset = out + h * m_stride;
+			memcpy(offset, m_tempPixelDataHolder + h * m_rowSize, m_rowSize);
+		}
+	}
+	else {
+		fread(out, frameSize, 1, m_fp);
+	}
+	
 	return true;
 }
