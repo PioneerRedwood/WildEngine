@@ -47,6 +47,10 @@ public:
     return m_rowSize;
   }
 
+  int stride() const {
+    return m_stride;
+  }
+
 private:
   VideoHeader m_header = { 0 };
 

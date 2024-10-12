@@ -104,20 +104,8 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
 	fseek(m_fp, (long)m_framePixelOffsets[ frameId ], SEEK_SET);
-
-	// 만약 4바이트 정렬이 아니면, 패딩을 추가한 메모리 할당
 	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
-
-	if (m_stride != m_rowSize) {
-		fread(m_tempPixelDataHolder, frameSize, 1, m_fp);
-		for (uint32_t h = 0; h < m_header.height; ++h) {
-			void* offset = out + h * m_stride;
-			memcpy(offset, m_tempPixelDataHolder + h * m_rowSize, m_rowSize);
-		}
-	}
-	else {
-		fread(out, frameSize, 1, m_fp);
-	}
+	fread(out, frameSize, 1, m_fp);
 	
 	return true;
 }
