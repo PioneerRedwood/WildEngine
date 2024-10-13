@@ -1,5 +1,4 @@
-# TIL
-오늘 내가 배운 것 (Today I Learned)
+# TIL; Today I Learned
 
 ## 구조체 크기 정렬
 32비트 어플리케이션은 CPU가 32비트씩 읽는 것이 효율적이므로 구조체 역시 크기가 32비트에 맞춰서 정렬된다. 
@@ -69,14 +68,3 @@ ffmpeg -ss 00:00:00 -i .\castle_on_the_hill.MOV -t 10 -r 12 -vf scale=iw/2:ih/2 
 - 해상도의 한계 뿐 아니라, 프레임을 스킵해야하는 경우 등 여러 상황을 위해서는 시간 베이스 접근이 반드시 요구됨
 - 예를 들어, 이동 및 충돌 등의 사건 역시 절대 변하지 않는 시간을 베이스로 계산해야 쉽고 정확
 - Windows 환경에서 주로 사용되는 타이머는 정확한 타이머인 `QueryPerformanceCounter` 사용
-
-## SDL 스트리밍
-- SDL로 비트맵 무비를 스트리밍하는 기능을 완성
-- SDL 윈도우 생성, 그래픽 그리기 등 기초부터 시작
-- 멀티 스레드; 비트맵을 스트리밍하기 위해서는 읽고 사용하는 스레드가 달라야 함
-  - beginThread, Critical Section 사용
-
-## SDL 사용 on Windows
-- [SDL2 다운로드](https://github.com/libsdl-org/SDL/releases/tag/release-2.30.7) 를 통해 `SDL2-devel-2.30.7-VC.zip`을 다운 받는다. 해당 압축 파일은 개발을 위한 용도로 Visual C++을 위한 패키지가 들어있다. 
-- 압축을 해제한 뒤 응용 프로그램이 실행되는 곳에 `SDL2.dll` 파일을 위치시킨다. 링크 시 필요. 
-- 프로젝트 파일의 속성에서 `Include directory`에 `SDL2/include` 경로를 추가한다. 
