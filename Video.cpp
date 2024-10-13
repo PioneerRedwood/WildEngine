@@ -34,7 +34,7 @@ int Video::frameSize() const {
 /// <returns></returns>
 int Video::getCurrentFrameIDByElapsed(double elapsed) const {
 	int frameId = (int)(elapsed * m_indexUnit);
-	frameId %= m_header.frameCount;
+	frameId %= m_header.totalFrame;
 	return frameId;
 }
 
@@ -59,7 +59,7 @@ bool Video::readVideoFromFile(const char* path) {
 	fseek(m_fp, 0, SEEK_SET);
 
 	// 전체 프레임을 순회하면서 각 프레임의 오프셋을 저장
-	m_framePixelOffsets = (uint64_t*)malloc(sizeof(uint64_t) * m_header.frameCount);
+	m_framePixelOffsets = (uint64_t*)malloc(sizeof(uint64_t) * m_header.totalFrame);
 	if (m_framePixelOffsets == nullptr) {
 		// 프레임 픽셀 오프셋 저장할 메모리 할당 실패
 		std::cout << "Video::readVideoFromFile failed allocation filepath:" << path << std::endl;
@@ -70,7 +70,7 @@ bool Video::readVideoFromFile(const char* path) {
 	m_rowSize = (std::size_t)m_header.width * BitsPerPixel;
 	m_stride = ((m_header.width * BitsPerPixel + 3) & ~3);
 	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
-	for (uint64_t i = 0; i < m_header.frameCount; ++i) {
+	for (uint64_t i = 0; i < m_header.totalFrame; ++i) {
 		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
 	}
 

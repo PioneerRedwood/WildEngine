@@ -9,7 +9,7 @@ struct Frame{
 };
 
 struct VideoHeader {
-  uint32_t frameCount;
+  uint32_t totalFrame;
   uint32_t width;
   uint32_t height;
   uint32_t fps;

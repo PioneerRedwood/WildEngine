@@ -76,7 +76,7 @@ typedef enum {
 // 마지막 프레임을 저장하고 난 뒤 헤더 작성. 헤더에는 프레임 수, 프레임 크기, 초당 프레임 수
 
 typedef struct {
-	uint32_t frameCount;
+	uint32_t totalFrame;
 	uint32_t width;
 	uint32_t height;
 	uint32_t fps;
