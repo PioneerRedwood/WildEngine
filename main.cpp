@@ -10,6 +10,7 @@
 #include <synchapi.h> // CriticalSection
 
 #include "Video.h"
+#include "Sprite.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -30,6 +31,7 @@ double deltaTime = 0;
 int quit = 0;
 
 Video v = {};
+Sprite s = {};
 SDL_Texture* sdlTexture = {};
 uint64_t videoStartTime = {};
 
@@ -75,6 +77,50 @@ namespace debug {
 		indicatorRect.x = x + currentPreloadFrameID * margin;
 		SDL_RenderDrawRect(renderer, &indicatorRect);
 	}
+}
+
+bool PrepareResource() {
+	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
+//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
+	if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
+		//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
+		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
+		//if (not v.readVideoFromFile("resources/videos/small.mv")) {
+		std::cout << "Failed ReadBitmapMovie \n";
+		ExitProgram();
+		return false;
+	}
+
+	// 미리 로드 시작 - 단 하나의 텍스처만 생성하고 이를 그릴 때 픽셀데이터로 업데이트하는 것으로 한다 
+	int count = MAX_PRELOAD_FRAME_COUNT > v.header().totalFrame ? v.header().totalFrame : MAX_PRELOAD_FRAME_COUNT;
+
+	printf("Preloading started - %d \n", count);
+
+	// TODO: preloads 픽셀 데이터 읽어오기
+	for (int i = 0; i < count; ++i) {
+		Frame fr = {};
+		fr.index = i;
+		fr.pixelData = (uint8_t*)malloc(v.frameSize());
+		if (not v.readFrame(i, fr.pixelData)) {
+			std::cout << "Video::readFrame loading preload frames failed \n";
+			SDL_assert(false);
+			return false;
+		}
+
+		bufferingFrames.push_back(fr);
+	}
+
+	// TODO: Video 내 단 하나의 텍스처만 생성하기
+	sdlTexture = SDL_CreateTexture(renderer,
+		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
+		v.header().width, v.header().height);
+
+	printf("Preloading ended - %d \n", count);
+
+
+	// TODO: Sprite 로드하기
+
+	return true;
 }
 
 bool InitProgram(int width, int height) {
@@ -303,41 +349,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
-	//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
-	if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
-	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
-	//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
-	//if (not v.readVideoFromFile("resources/videos/small.mv")) {
-		std::cout << "Failed ReadBitmapMovie \n";
-		ExitProgram();
-		return 1;
-	}
-
-	// 미리 로드 시작 - 단 하나의 텍스처만 생성하고 이를 그릴 때 픽셀데이터로 업데이트하는 것으로 한다 
-	int count = MAX_PRELOAD_FRAME_COUNT > v.header().totalFrame ? v.header().totalFrame : MAX_PRELOAD_FRAME_COUNT;
-
-	printf("Preloading started - %d \n", count);
-
-	// TODO: preloads 픽셀 데이터 읽어오기
-	for (int i = 0; i < count; ++i) {
-		Frame fr = {};
-		fr.index = i;
-		fr.pixelData = (uint8_t*)malloc(v.frameSize());
-		if (not v.readFrame(i, fr.pixelData)) {
-			std::cout << "Video::readFrame loading preload frames failed \n";
-			SDL_assert(false);
-		}
-
-		bufferingFrames.push_back(fr);
-	}
-
-	// TODO: Video 내 단 하나의 텍스처만 생성하기
-	sdlTexture = SDL_CreateTexture(renderer,
-		SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
-		v.header().width, v.header().height);
-
-	printf("Preloading ended - %d \n", count);
+	PrepareResource();
 
 	// Debug 기능 초기화
 	debug::InitRect();

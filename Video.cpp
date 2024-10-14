@@ -74,11 +74,6 @@ bool Video::readVideoFromFile(const char* path) {
 		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
 	}
 
-	// 패딩이 필요한 것이라면 임시 픽셀 데이터 홀더 생성
-	if (m_stride != m_rowSize) {
-		m_tempPixelDataHolder = (uint8_t*)malloc(frameSize);
-	}
-
 	//m_indexUnit = (float)1 / 1000; // 느리게
 	//m_indexUnit = (float)0.1 / 1000; // 많이 느리게
 	m_indexUnit = (float)m_header.fps / 1000;

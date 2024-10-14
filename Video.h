@@ -64,7 +64,5 @@ private:
 
   int m_stride = {};
 
-  uint8_t* m_tempPixelDataHolder = {};
-
   int m_rowSize = {};
 };
