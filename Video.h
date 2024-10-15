@@ -47,22 +47,14 @@ public:
     return m_rowSize;
   }
 
-  int stride() const {
-    return m_stride;
-  }
-
 private:
   VideoHeader m_header = { 0 };
-
-  uint64_t* m_framePixelOffsets = { nullptr };
 
   FILE* m_fp = { nullptr };
 
   float m_indexUnit = { 0.0f };
 
   uint64_t m_startTime = { 0 };
-
-  int m_stride = {};
 
   int m_rowSize = {};
 };

@@ -4,16 +4,10 @@
 #include <iostream>
 
 namespace {
-	constexpr auto BitsPerPixel = 3; // RGB Pixel bytes;
+	constexpr auto BitsPerPixel = 3; // BI_RGB Pixel bytes;
 }
 
 Video::~Video() {
-	if (m_framePixelOffsets != nullptr) {
-		free(m_framePixelOffsets);
-	}
-	if (m_tempPixelDataHolder != nullptr) {
-		free(m_tempPixelDataHolder);
-	}
 }
 
 void Video::startTime(uint64_t time) {
@@ -23,8 +17,8 @@ void Video::startTime(uint64_t time) {
 }
 
 int Video::frameSize() const {
-  return m_stride * m_header.height;
-  //return m_rowSize * m_header.height;
+  //return m_stride * m_header.height;
+  return m_rowSize * m_header.height;
 }
 
 /// <summary>
@@ -58,21 +52,8 @@ bool Video::readVideoFromFile(const char* path) {
 	fread(&m_header, sizeof(VideoHeader), 1, m_fp);
 	fseek(m_fp, 0, SEEK_SET);
 
-	// 전체 프레임을 순회하면서 각 프레임의 오프셋을 저장
-	m_framePixelOffsets = (uint64_t*)malloc(sizeof(uint64_t) * m_header.totalFrame);
-	if (m_framePixelOffsets == nullptr) {
-		// 프레임 픽셀 오프셋 저장할 메모리 할당 실패
-		std::cout << "Video::readVideoFromFile failed allocation filepath:" << path << std::endl;
-		return false;
-	}
-
 	// 프레임 크기
 	m_rowSize = (std::size_t)m_header.width * BitsPerPixel;
-	m_stride = ((m_header.width * BitsPerPixel + 3) & ~3);
-	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
-	for (uint64_t i = 0; i < m_header.totalFrame; ++i) {
-		m_framePixelOffsets[ i ] = (uint64_t)(i * frameSize);
-	}
 
 	//m_indexUnit = (float)1 / 1000; // 느리게
 	//m_indexUnit = (float)0.1 / 1000; // 많이 느리게
@@ -98,8 +79,9 @@ bool Video::readFrame(uint32_t frameId, uint8_t* out) {
 
 	//printf("Video::readFrame %u - offset %llu \n", frameId, offset);
 
-	fseek(m_fp, (long)m_framePixelOffsets[ frameId ], SEEK_SET);
-	uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
+	const uint64_t frameSize = (uint64_t)(m_rowSize * m_header.height);
+	long offset = frameSize * frameId;
+	fseek(m_fp, offset, SEEK_SET);
 	fread(out, frameSize, 1, m_fp);
 	
 	return true;

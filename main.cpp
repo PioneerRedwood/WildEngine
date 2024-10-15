@@ -14,7 +14,6 @@
 
 #pragma comment(lib, "winmm.lib")
 
-
 // #define vs. constexpr auto?
 constexpr auto MAX_PRELOAD_FRAME_COUNT = 16;
 //#define MAX_PRELOAD_FRAME_COUNT 16
@@ -79,6 +78,40 @@ namespace debug {
 	}
 }
 
+bool InitProgram(int width, int height) {
+	// SDL 초기화
+	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+		std::cout << "SDL Init failed! SDL_Error: " << SDL_GetError() << std::endl;
+		return false;
+	}
+
+	// SDL 윈도우 및 렌더러 생성
+	if (SDL_CreateWindowAndRenderer(width, height, 0, &window, &renderer) != 0) {
+		std::cout << "SDL Create window and render failed! SDL_Error: " << SDL_GetError() << std::endl;
+		SDL_Quit();
+		return false;
+	}
+
+	std::cout << "InitProgram succeeded\n";
+
+	return true;
+}
+
+void ExitProgram() {
+	std::cout << "Program exit \n";
+
+	if (points != nullptr) {
+		free(points);
+	}
+
+	// 윈도우/렌더러 파괴
+	SDL_DestroyWindow(window);
+	SDL_DestroyRenderer(renderer);
+
+	// SDL 종료
+	SDL_Quit();
+}
+
 bool PrepareResource() {
 	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
 //if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
@@ -117,44 +150,13 @@ bool PrepareResource() {
 
 	printf("Preloading ended - %d \n", count);
 
-
 	// TODO: Sprite 로드하기
-
-	return true;
-}
-
-bool InitProgram(int width, int height) {
-	// SDL 초기화
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		std::cout << "SDL Init failed! SDL_Error: " << SDL_GetError() << std::endl;
+	if (not s.readFromFile("resources/sprites/bird.sp")) {
+		ExitProgram();
 		return false;
 	}
 
-	// SDL 윈도우 및 렌더러 생성
-	if (SDL_CreateWindowAndRenderer(width, height, 0, &window, &renderer) != 0) {
-		std::cout << "SDL Create window and render failed! SDL_Error: " << SDL_GetError() << std::endl;
-		SDL_Quit();
-		return false;
-	}
-
-	std::cout << "InitProgram succeeded\n";
-
 	return true;
-}
-
-void ExitProgram() {
-	std::cout << "Program exit \n";
-
-	if (points != nullptr) {
-		free(points);
-	}
-
-	// 윈도우/렌더러 파괴
-	SDL_DestroyWindow(window);
-	SDL_DestroyRenderer(renderer);
-
-	// SDL 종료
-	SDL_Quit();
 }
 
 // 생산자 스레드. 
@@ -208,12 +210,14 @@ void LoadFrameThread(void* arg) {
 	}
 }
 
-void Update(double delta) {
-	if (videoStartTime == 0) { videoStartTime = SDL_GetPerformanceCounter(); }
+void RenderVideo() {
+	if (v.startTime() == 0) {
+		v.startTime(SDL_GetPerformanceCounter());
+	}
 
 	// 경과시간을 기준으로 현재 프레임 ID를 구한다
 	// 특정 시간으로부터 경과한 밀리초 구하기
-	double elapsed = (double)(SDL_GetPerformanceCounter() - videoStartTime) / SDL_GetPerformanceFrequency() * 1000;
+	double elapsed = (double)(SDL_GetPerformanceCounter() - v.startTime()) / SDL_GetPerformanceFrequency() * 1000;
 	int currentFrameID = v.getCurrentFrameIDByElapsed(elapsed);
 
 	//std::cout << "Elapsed since video started " << elapsed << "ms - " << currentFrameId << " / " << v.header().frameCount << std::endl;
@@ -303,6 +307,7 @@ void Update(double delta) {
 		points = (SDL_Point*)malloc(v.frameSize());
 	}
 
+	// 프래그먼트 쉐이더가 수행하는 동작. 
 	// 각 픽셀 데이터에 대한 RGB 정보를 포인트에 저장하고 점찍기 수행
 	for (auto y = 0; y < v.header().height; ++y) {
 		//std::cout << y << ": ";
@@ -315,15 +320,15 @@ void Update(double delta) {
 			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 0 ]) << " "
 			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 1 ]) << " "
 			//	<< std::setw(2) << std::setfill('0') << static_cast<int>(rgb[ 2 ]) << " " << std::dec;
-			// 127 127 120 R G B | R G
+#if 1
+			SDL_SetRenderDrawColor(renderer, rgb[0], rgb[1], rgb[2], 255);
+#else
 			// Grayscale
-			// R + G + B / 3
-			//Uint8 g = (Uint8)((rgb[ 0 ] + rgb[ 1 ] + rgb[ 2 ]) / 3);
-			// 프래그먼트 쉐이더가 수행하는 동작. 
 			// 0.299 ∙ Red + 0.587 ∙ Green + 0.114 ∙ Blue
 			Uint8 g = (Uint8)(rgb[ 0 ] * 0.299 + rgb[ 1 ] * 0.587 + rgb[ 2 ] * 0.114);
-			//SDL_SetRenderDrawColor(renderer, rgb[0], rgb[1], rgb[2], 255);
 			SDL_SetRenderDrawColor(renderer, g, g, g, 255);
+#endif
+			
 			SDL_RenderDrawPoint(renderer, x, y);
 		}
 		//std::cout << " \n";
@@ -335,9 +340,19 @@ void Update(double delta) {
 	LeaveCriticalSection(&cs);
 #endif
 
-	// 렌더
-	SDL_RenderPresent(renderer);
 	lastDrawFrameID = currentFrameID;
+}
+
+void RenderSprite(double delta) {
+	// TODO: 현재 그릴 픽셀 데이터 파일로부터 로드
+	if (not s.prepareFrame(delta)) {
+		// 로드 실패
+		return;
+	}
+
+	// TODO: 정해진 위치에 그리기
+	
+		// TODO: 알파 처리
 }
 
 int main(int argc, char** argv) {
@@ -379,7 +394,11 @@ int main(int argc, char** argv) {
 		// 오브젝트 업데이트
 
 		// 렌더링 업데이트
-		Update(deltaTime);
+		RenderVideo();
+
+		RenderSprite(deltaTime);
+
+		SDL_RenderPresent(renderer);
 
 		//_sleep(100);
 	}
