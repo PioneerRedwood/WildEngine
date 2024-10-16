@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdio>
 #include <SDL.h>
 
@@ -10,8 +10,8 @@ struct SpriteHeader {
 
 class Sprite {
 public:
-	// default fps is 12
-	Sprite(int fps = 12);
+	// 기본 fps를 설정
+	Sprite(int fps = 1);
 	
 	~Sprite();
 
@@ -25,12 +25,28 @@ public:
 
 	bool readFrame(int index, uint8_t* out);
 
+	uint8_t* pixelData() {
+		return m_pixelData;
+	}
+
+	int rowSize() const {
+		return m_rowSize;
+	}
+
+	uint32_t height() const {
+		return m_header.height;
+	}
+
+	uint32_t width() const {
+		return m_header.width;
+	}
+
 private:
 	FILE* m_fp = {};
 
 	SpriteHeader m_header = {};
 
-	uint8_t* m_frameData = {};
+	uint8_t* m_pixelData = {};
 
 	int m_rowSize = { 0 };
 

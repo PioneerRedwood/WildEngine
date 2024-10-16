@@ -236,12 +236,14 @@ void RenderVideo() {
 		if (bufferingFrames.empty()) {
 			break;
 		}
-		std::cout << "Finding frameID - ";
-		for (auto& i : bufferingFrames) {
-			std::cout << i.index << " ";
-		}
-		std::cout << std::endl;
+		//std::cout << "Finding frameID - ";
+		//for (auto& i : bufferingFrames) {
+		//	std::cout << i.index << " ";
+		//}
+		//std::cout << std::endl;
 		if (bufferingFrames.front().index == currentFrameID) {
+			// Debug용 로그
+			std::cout << "Found frame " << currentFrameID << " at " << debug_frameID << std::endl;
 			found = bufferingFrames.front();
 			break;
 		}
@@ -260,6 +262,7 @@ void RenderVideo() {
 		}
 		bufferingFrames.clear();
 		LeaveCriticalSection(&cs);
+		std::cout << "Cannot find in buffering .. skip this frame \n";
 		return;
 	}
 
@@ -350,9 +353,46 @@ void RenderSprite(double delta) {
 		return;
 	}
 
+	const unsigned xPos = 150;
+	const unsigned yPos = 150;
+
 	// TODO: 정해진 위치에 그리기
-	
-		// TODO: 알파 처리
+	uint8_t* data = s.pixelData();
+	if (data == nullptr) {
+		// 아직 픽셀 데이터가 준비되어있지 않음
+		return;
+	}
+	for (auto y = 0; y < s.height(); ++y) {
+		for (auto x = 0; x < s.width(); ++x) {
+#if USE_GRAYSCALE
+			// Grayscale [ 0.299 ∙ Red + 0.587 ∙ Green + 0.114 ∙ Blue ]
+			Uint8 g = (Uint8)(rgb[ 0 ] * 0.299 + rgb[ 1 ] * 0.587 + rgb[ 2 ] * 0.114);
+			SDL_SetRenderDrawColor(renderer, g, g, g, alpha);
+#else
+			int rowOffset = y * s.rowSize() + (x * 3);
+			Uint8 rgb[ 3 ] = {
+				data[ rowOffset + 2 ], data[ rowOffset + 1 ], data[ rowOffset + 0 ]
+			};
+
+			// TODO: 알파 처리, 분홍색인 경우 알파값이 0이어야 함. 이것도 이상하게 나온다. 
+			Uint8 alpha = 255;
+			if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
+				alpha = 0;
+			}
+			SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], alpha);
+
+			// TODO: 분홍색(255, 0, 200)이 알파로 설정했으니, 이 색상인 경우에는 그리기를 건너뛰면?
+			// 이상하게 나옴
+			//if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
+			//	continue;
+			//}
+			//else {
+			//	SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], 255);
+			//}
+#endif
+			SDL_RenderDrawPoint(renderer, x + xPos, y + yPos);
+		}
+	}
 }
 
 int main(int argc, char** argv) {

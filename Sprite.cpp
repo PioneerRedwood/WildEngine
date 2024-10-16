@@ -2,7 +2,7 @@
 #include <iostream>
 
 namespace {
-	constexpr auto BitsPerPixel = 3; // BI_RGB Pixel bytes;
+	constexpr auto BytesPerPixel = 3; // BI_RGB Pixel bytes;
 }
 
 Sprite::Sprite(int fps)
@@ -15,7 +15,7 @@ Sprite::~Sprite() {
 }
 
 bool Sprite::readFromFile(const char* path) {
-	std::cout << "Sprite::readFromFile started path: " << path << std::endl;
+	//std::cout << "Sprite::readFromFile started path: " << path << std::endl;
 
 	errno_t err = fopen_s(&m_fp, path, "rb");
 	if (err != 0) {
@@ -28,17 +28,17 @@ bool Sprite::readFromFile(const char* path) {
 	fread(&m_header, sizeof(SpriteHeader), 1, m_fp);
 	fseek(m_fp, 0, SEEK_SET);
 
-	m_rowSize = m_header.width * BitsPerPixel;
+	m_rowSize = m_header.width * BytesPerPixel;
 
-	m_frameData = (uint8_t*)malloc(m_rowSize * m_header.height);
-	if (m_frameData == nullptr) {
+	m_pixelData = (uint8_t*)malloc(m_rowSize * m_header.height);
+	if (m_pixelData == nullptr) {
 		std::cout << "malloc failed \n";
 		return false;
 	}
 
 	m_frameDuration = (double)m_fps / 1000;
 	
-	std::cout << "Sprite::readFromFile finished path: " << path << std::endl;
+	//std::cout << "Sprite::readFromFile finished path: " << path << std::endl;
 
 	return true;
 }
@@ -49,6 +49,7 @@ bool Sprite::prepareFrame(double delta) {
 	// 만약 초당 10프레임이라 했을때 프레임당 100밀리초씩 사용..
 	// 현재 프레임이 0일때 경과시간이 100 초과 200 미만인 경우 1번 프레임 사용
 
+	// TODO: 다음 프레임을 계산하는 방식이 이상함 - 수정바람
 	// 경과시간 누적
 	m_elapsedTime += delta;
 
@@ -56,13 +57,15 @@ bool Sprite::prepareFrame(double delta) {
 	if (m_elapsedTime >= m_frameDuration) {
 		// 다음 프레임으로 이동
 		m_currentFrameIndex = (m_currentFrameIndex + 1) % m_header.totalCount; // 루프
-		m_elapsedTime -= m_frameDuration; // 경과시간에서 프레임 지속시간을 빼기
+		//m_elapsedTime -= m_frameDuration; // 경과시간에서 프레임 지속시간을 빼기
+		m_elapsedTime = 0; // 경과시간에서 프레임 지속시간을 빼기
 	}
 
 	std::cout << "Sprite::prepareFrame delta: " << delta
+		<< " elapsed: " << m_elapsedTime
 		<< " m_currentFrameIndex: " << m_currentFrameIndex << std::endl;
 
-	if (not readFrame(m_currentFrameIndex, m_frameData)) {
+	if (not readFrame(m_currentFrameIndex, m_pixelData)) {
 		std::cout << "Sprite::prepareFrame failed \n";
 		return false;
 	}

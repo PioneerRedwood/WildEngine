@@ -4,7 +4,7 @@
 #include <iostream>
 
 namespace {
-	constexpr auto BitsPerPixel = 3; // BI_RGB Pixel bytes;
+	constexpr auto BytesPerPixel = 3; // BI_RGB Pixel bytes;
 }
 
 Video::~Video() {
@@ -53,7 +53,7 @@ bool Video::readVideoFromFile(const char* path) {
 	fseek(m_fp, 0, SEEK_SET);
 
 	// 프레임 크기
-	m_rowSize = (std::size_t)m_header.width * BitsPerPixel;
+	m_rowSize = (std::size_t)m_header.width * BytesPerPixel;
 
 	//m_indexUnit = (float)1 / 1000; // 느리게
 	//m_indexUnit = (float)0.1 / 1000; // 많이 느리게
