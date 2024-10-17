@@ -269,7 +269,7 @@ void RenderVideo() {
 	LeaveCriticalSection(&cs);
 
 	// TODO: 가져온 프레임의 픽셀 데이터로 텍스처를 업데이트
-#if 0
+#if 1
 	void* pixelData = {};
 	int pitch = {};
 	// SDL 소스 확인해보기
@@ -375,20 +375,21 @@ void RenderSprite(double delta) {
 			};
 
 			// TODO: 알파 처리, 분홍색인 경우 알파값이 0이어야 함. 이것도 이상하게 나온다. 
-			Uint8 alpha = 255;
-			if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
-				alpha = 0;
-			}
-			SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], alpha);
+			//Uint8 alpha = 255;
+			//if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
+			//	rgb[ 0 ] = 0; rgb[ 1 ] = 0; rgb[ 2 ] = 0;
+			//	alpha = 0;
+			//}
+			//SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], alpha);
 
 			// TODO: 분홍색(255, 0, 200)이 알파로 설정했으니, 이 색상인 경우에는 그리기를 건너뛰면?
 			// 이상하게 나옴
-			//if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
-			//	continue;
-			//}
-			//else {
-			//	SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], 255);
-			//}
+			if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
+				continue;
+			}
+			else {
+				SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], 255);
+			}
 #endif
 			SDL_RenderDrawPoint(renderer, x + xPos, y + yPos);
 		}
@@ -433,10 +434,15 @@ int main(int argc, char** argv) {
 
 		// 오브젝트 업데이트
 
+		// 비디오를 먼저 그려야 할 것 같아 먼저 렌더를 호출하면
+		// 그려지지 않고 스프라이트만 덩그러니 남겨짐
+
 		// 렌더링 업데이트
-		RenderVideo();
+		//RenderVideo();
 
 		RenderSprite(deltaTime);
+
+		RenderVideo();
 
 		SDL_RenderPresent(renderer);
 

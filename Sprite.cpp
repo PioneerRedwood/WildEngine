@@ -36,7 +36,8 @@ bool Sprite::readFromFile(const char* path) {
 		return false;
 	}
 
-	m_frameDuration = (double)m_fps / 1000;
+	//m_frameDuration = (double)m_fps / 1000;
+	m_frameDuration = (double)500;
 	
 	//std::cout << "Sprite::readFromFile finished path: " << path << std::endl;
 
