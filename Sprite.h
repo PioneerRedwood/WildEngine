@@ -11,7 +11,7 @@ struct SpriteHeader {
 class Sprite {
 public:
 	// 기본 fps를 설정
-	Sprite(int fps = 1);
+	Sprite(int fps = 3);
 	
 	~Sprite();
 

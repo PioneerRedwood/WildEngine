@@ -151,7 +151,8 @@ bool PrepareResource() {
 	printf("Preloading ended - %d \n", count);
 
 	// TODO: Sprite 로드하기
-	if (not s.readFromFile("resources/sprites/bird.sp")) {
+	//if (not s.readFromFile("resources/sprites/blue_bird.sp")) {
+	if (not s.readFromFile("resources/sprites/red_bird.sp")) {
 		ExitProgram();
 		return false;
 	}

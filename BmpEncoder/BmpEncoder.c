@@ -262,8 +262,11 @@ int LoadBitmap(bitmap* bmp, const char* path) {
 	return SUCCESS;
 }
 
-#define OUTFILE "../resources/sprites/bird.sp"
-#define IN_DIR "../resources/sprites/blue-birds/"
+//#define OUTFILE "../resources/sprites/blue_bird.sp"
+//#define IN_DIR "../resources/sprites/blue-birds/"
+
+#define OUTFILE "../resources/sprites/red_bird.sp"
+#define IN_DIR "../resources/sprites/red-birds/"
 
 int main(int argc, char** argv) {
 	FILE* fp = fopen(OUTFILE, "wb");
