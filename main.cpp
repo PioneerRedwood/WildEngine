@@ -67,8 +67,6 @@ namespace debug {
 	void DrawUsingFrameStatus(int currentPreloadFrameID) {
 		// TODO: 화면에 현재 사용중인 프레임과 전체 프레임을 사각형으로 그린다.
 		// 전체 프리로드 수가 너무 많으면 화면에 다 그리기 힘듬. 적정 개수만 할것. 
-		std::cout << "DEBUG DrawUsingFrameStatus " << currentPreloadFrameID << std::endl;
-
 		SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 		SDL_RenderDrawRects(renderer, rects, bufferingFrames.size());
 
@@ -113,12 +111,10 @@ void ExitProgram() {
 }
 
 bool PrepareResource() {
-	// 적어도 256개 이상의 연속성이 눈에 잘 띄는 리소스로 준비할 것. 
-//if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
-	if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
-		//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
-		//if (not v.readVideoFromFile("resources/videos/medium.mv")) {
-		//if (not v.readVideoFromFile("resources/videos/small.mv")) {
+	// 연속성이 눈에 잘 띄는 리소스
+	if (not v.readVideoFromFile("resources/videos/american-town.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/american-town3.mv")) {
+	//if (not v.readVideoFromFile("resources/videos/dresden.mv")) {
 		std::cout << "Failed ReadBitmapMovie \n";
 		ExitProgram();
 		return false;
@@ -187,7 +183,7 @@ void LoadFrameThread(void* arg) {
 		// TODO: 읽어야할 프레임을 파일로부터 읽기.
 		if (nextPreloadFrameID == -1) {
 			// 만약 읽어놓은게 아무것도 없다면, 현재 프레임을 기준으로 읽는다 
-			double elapsed = (double)(SDL_GetPerformanceCounter() - videoStartTime) / SDL_GetPerformanceFrequency() * 1000;
+			double elapsed = (double)(SDL_GetPerformanceCounter() - v->startTime()) / SDL_GetPerformanceFrequency() * 1000;
 			nextPreloadFrameID = v->getCurrentFrameIDByElapsed(elapsed);
 		}
 
@@ -198,6 +194,9 @@ void LoadFrameThread(void* arg) {
 		if (not v->readFrame(nextPreloadFrameID, fr.pixelData)) {
 			std::cout << "Video::readFrame failed \n";
 			SDL_assert(false);
+		}
+		else {
+			std::cout << "LoadFrameThread readFrame from Video " << nextPreloadFrameID << std::endl;
 		}
 
 		// CriticalSection의 사이에 있는 것은 최소한으로 줄이는 것이 좋음
@@ -244,7 +243,12 @@ void RenderVideo() {
 		//std::cout << std::endl;
 		if (bufferingFrames.front().index == currentFrameID) {
 			// Debug용 로그
-			std::cout << "Found frame " << currentFrameID << " at " << debug_frameID << std::endl;
+			std::cout << "Found frame " << currentFrameID << " at " << debug_frameID;
+			std::cout << " buffering - ";
+			for (auto& i : bufferingFrames) {
+				std::cout << i.index << " ";
+			}
+			std::cout << std::endl;
 			found = bufferingFrames.front();
 			break;
 		}
@@ -258,12 +262,17 @@ void RenderVideo() {
 	// TODO: 만약 로드한 프레임 중에서 그릴 프레임을 찾을 수 없다면 스킵. 모든 로드한 프레임 삭제. 
 	// 프레임 스킵 처리
 	if (found.index == -1) {
+		std::cout << "Cannot find in buffering .. skip this frame currentFrameID: " << currentFrameID;
+		std::cout << " buffering - ";
+		for (auto& i : bufferingFrames) {
+			std::cout << i.index << " ";
+		}
+		std::cout << std::endl;
 		for (auto& i : bufferingFrames) {
 			free(i.pixelData);
 		}
 		bufferingFrames.clear();
 		LeaveCriticalSection(&cs);
-		std::cout << "Cannot find in buffering .. skip this frame \n";
 		return;
 	}
 
@@ -375,23 +384,15 @@ void RenderSprite(double delta) {
 				data[ rowOffset + 2 ], data[ rowOffset + 1 ], data[ rowOffset + 0 ]
 			};
 
-			// TODO: 알파 처리, 분홍색인 경우 알파값이 0이어야 함. 이것도 이상하게 나온다. 
-			//Uint8 alpha = 255;
-			//if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
-			//	rgb[ 0 ] = 0; rgb[ 1 ] = 0; rgb[ 2 ] = 0;
-			//	alpha = 0;
-			//}
-			//SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], alpha);
-
-			// TODO: 분홍색(255, 0, 200)이 알파로 설정했으니, 이 색상인 경우에는 그리기를 건너뛰면?
-			// 이상하게 나옴
+			// TODO: 칼라값이 미리 설정한 알파와 동일하다면 그리기 건너뛰기
 			if (rgb[ 0 ] == 255 && rgb[ 1 ] == 0 && rgb[ 2 ] == 220) {
 				continue;
 			}
 			else {
 				SDL_SetRenderDrawColor(renderer, rgb[ 0 ], rgb[ 1 ], rgb[ 2 ], 255);
 			}
-#endif
+
+#endif // USE_GRAYSCALE
 			SDL_RenderDrawPoint(renderer, x + xPos, y + yPos);
 		}
 	}
