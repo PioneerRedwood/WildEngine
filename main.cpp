@@ -279,7 +279,7 @@ void RenderVideo() {
 	LeaveCriticalSection(&cs);
 
 	// TODO: 가져온 프레임의 픽셀 데이터로 텍스처를 업데이트
-#if 1
+#if 0
 	void* pixelData = {};
 	int pitch = {};
 	// SDL 소스 확인해보기
@@ -341,7 +341,6 @@ void RenderVideo() {
 			Uint8 g = (Uint8)(rgb[ 0 ] * 0.299 + rgb[ 1 ] * 0.587 + rgb[ 2 ] * 0.114);
 			SDL_SetRenderDrawColor(renderer, g, g, g, 255);
 #endif
-			
 			SDL_RenderDrawPoint(renderer, x, y);
 		}
 		//std::cout << " \n";
@@ -436,19 +435,11 @@ int main(int argc, char** argv) {
 
 		// 오브젝트 업데이트
 
-		// 비디오를 먼저 그려야 할 것 같아 먼저 렌더를 호출하면
-		// 그려지지 않고 스프라이트만 덩그러니 남겨짐
-
-		// 렌더링 업데이트
-		//RenderVideo();
+		RenderVideo();
 
 		RenderSprite(deltaTime);
 
-		RenderVideo();
-
 		SDL_RenderPresent(renderer);
-
-		//_sleep(100);
 	}
 
 	ExitProgram();

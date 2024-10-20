@@ -56,7 +56,7 @@ bool Sprite::prepareFrame(double delta) {
 		// 다음 프레임으로 이동
 		m_currentFrameIndex = (m_currentFrameIndex + 1) % m_header.totalCount; // 루프
 		//m_elapsedTime -= m_frameDuration; // 경과시간에서 프레임 지속시간을 빼기
-		m_elapsedTime = 0; // 경과시간에서 프레임 지속시간을 빼기
+		m_elapsedTime = 0;
 	}
 
 	//std::cout << "Sprite::prepareFrame delta: " << delta

@@ -68,3 +68,27 @@ ffmpeg -ss 00:00:00 -i .\castle_on_the_hill.MOV -t 10 -r 12 -vf scale=iw/2:ih/2 
 - 해상도의 한계 뿐 아니라, 프레임을 스킵해야하는 경우 등 여러 상황을 위해서는 시간 베이스 접근이 반드시 요구됨
 - 예를 들어, 이동 및 충돌 등의 사건 역시 절대 변하지 않는 시간을 베이스로 계산해야 쉽고 정확
 - Windows 환경에서 주로 사용되는 타이머는 정확한 타이머인 `QueryPerformanceCounter` 사용
+
+## Inline Assembly - 인라인 어셈블리
+- [C 코드에서 인라인 어셈블리를 사용하는 방법](https://gcc.gnu.org/onlinedocs/gcc/extensions-to-the-c-language-family/how-to-use-inline-assembly-language-in-c-code.html)
+- 예전에는 픽셀 단위로 렌더링하는 것을 사용해왔다. 이중 루프이므로 속도가 매우 느리다. 그래서 이 그리는 기능의 일부를 어셈블리로 인라인하여 사용하는 경우가 있었다고 한다. 
+
+## 32bit vs. 64bit 아키텍처의 레지스터
+- CPU에서 직접적으로 접근 가능한 raw 메모리를 보관
+- CPU마다 다른 변수 정의 (x86 AX BX CX EX ...)
+- [X86 Architecture Microsoft Doc](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x86-architecture)
+- [X64 Architecture Microsoft Doc](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture)
+
+## SIMD (Single Instruction Multiple Data)
+- ARM - SIMD (NEON)
+- 엔진에서는 CPU 연산으로 벡터, 메트릭스 연산 빠르게 가능
+- DirectX 3D - SIMD 매트릭스 적용되어있음
+
+## 256 컬러
+- 팔레트 사용
+- 256 컬러를 쓰는 게임: 스타1, 디아블로 1, 디아블로 2(버전이 다름) - 테크닉 (물 흐르는 것을 팔레트 교체로 표현)
+- 예를 들어, 100 X 100 크기의 텍스처가 있을 때, RGB 각각 1바이트씩 표현하면 전체 100 X 100 X 3 = 30,000 바이트가 요구된다.
+  그러나 1바이트 (0 ~ 255) 256가지의 컬러 팔레트를 사용한다면, 한 색상당 1바이트씩만 사용하기 때문에 10,000 바이트만 요구된다. 
+  (팔레트 크기 제외)
+- PCX (256 컬러 확장자) 전용 툴이 존재
+- 던파, 리니지 1(예전)에서 사용
